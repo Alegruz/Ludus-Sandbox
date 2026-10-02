@@ -353,7 +353,49 @@ def configure_sandbox(
         cwd=repo_root,
     )
 
-    
+
+def configure_sandbox_web(
+    repo_root: Path,
+    ludus_source: Path,
+    slang_compiler: Path,
+    spirv_validator: Path,
+) -> None:
+    """Configure the browser (Emscripten/WebGPU) preset so that
+    ``cmake --build --preset web-emscripten-development`` has a build tree.
+
+    Emscripten cross-compilation must run under the emsdk's ``emcmake`` wrapper
+    so emcc/the toolchain are discovered; the generated user preset supplies the
+    toolchain file, prefix and shader tools."""
+    web_preset = "web-emscripten-development"
+
+    cmake = ludus_source / "out" / "host-tools" / "venv" / "bin" / "cmake"
+    emcmake = (
+        ludus_source
+        / "out"
+        / "host-tools"
+        / "emsdk"
+        / "upstream"
+        / "emscripten"
+        / "emcmake"
+    )
+    if not cmake.is_file():
+        raise RuntimeError(f"Expected Ludus-managed CMake does not exist: {cmake}")
+    if not emcmake.is_file():
+        raise RuntimeError(f"Expected emsdk emcmake does not exist: {emcmake}")
+
+    run(
+        [
+            str(emcmake),
+            str(cmake),
+            "--preset",
+            web_preset,
+            f"-DLUDUS_SLANG_COMPILER={slang_compiler}",
+            f"-DLUDUS_SPIRV_VALIDATOR={spirv_validator}",
+        ],
+        cwd=repo_root,
+    )
+
+
 def init_command(args: argparse.Namespace) -> None:
     repo_root = Path(__file__).resolve().parents[2]
 
@@ -418,11 +460,29 @@ def init_command(args: argparse.Namespace) -> None:
         spirv_validator=spirv_validator,
     )
 
+    # Configure the browser preset too, when the web SDK and the emsdk toolchain
+    # are available, so the web build tree exists for `cmake --build --preset
+    # web-emscripten-development`. Mirrors the condition in write_user_presets.
+    emscripten_emcmake = (
+        ludus_source / "out" / "host-tools" / "emsdk" / "upstream" / "emscripten" / "emcmake"
+    )
+    web_configured = False
+    if web_sdk_dir is not None and emscripten_emcmake.is_file():
+        configure_sandbox_web(
+            repo_root=repo_root,
+            ludus_source=ludus_source,
+            slang_compiler=slang_compiler,
+            spirv_validator=spirv_validator,
+        )
+        web_configured = True
+
     print()
     print("Ludus Sandbox initialization complete.")
     print()
     print(f"Ludus source:     {ludus_source}")
     print(f"Ludus SDK:        {sdk_dir}")
+    if web_sdk_dir is not None:
+        print(f"Ludus web SDK:    {web_sdk_dir}")
     print(f"Slang compiler:   {slang_compiler}")
     print(f"SPIR-V validator: {spirv_validator}")
     print()
@@ -430,6 +490,8 @@ def init_command(args: argparse.Namespace) -> None:
     print()
     print("Build with:")
     print(f"  cmake --build --preset {args.preset}")
+    if web_configured:
+        print("  cmake --build --preset web-emscripten-development")
 
 
 def build_parser() -> argparse.ArgumentParser:

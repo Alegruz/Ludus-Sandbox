@@ -84,7 +84,7 @@ pass given the API-correct integration, but are honestly reported as unverified:
 | Job | Runner | What it proves |
 | --- | --- | --- |
 | **fast** | ubuntu-24.04 | Formatting (`clang-format-18 --dry-run --Werror`), `clang-tidy-18` with warnings-as-errors on the GPU-free sources, and the host logic tests (`tests/ocean_tests.cpp`). No engine SDK needed, so it is the quick gate on most changes. |
-| **native** | ubuntu-24.04 | `./init.sh` acquires the pinned Ludus SDK + Slang/SPIRV-Tools, builds the native (Vulkan) app — including the Slang → SPIR-V/WGSL shader build, with the pinned `spirv-val` actually running (ubuntu-24.04 has glibc 2.38+) — runs `ctest`, and asserts the generated shader artifacts (`ocean.h`, `*.spv`, `ocean.wgsl`) are present in the build. |
+| **native** | ubuntu-24.04 | `./init.sh` acquires the pinned Ludus SDK + Slang/SPIRV-Tools, builds the native (Vulkan) app — including the Slang → SPIR-V/WGSL shader build, with the pinned `spirv-val` actually running (ubuntu-24.04 has glibc 2.38+) — runs `ctest`, and asserts the generated shader artifacts (`ocean.h`, `*.spv`, `ocean.wgsl`) are present in the build. **This job passes green on CI**, confirming end-to-end SDK linkage and the real SPIR-V validation that the GPU-less dev sandbox could not run. |
 | **web** (best-effort) | ubuntu-24.04 | `./init.sh --with-web` acquires the Emscripten toolchain, builds the engine web tree and installs it to a prefix, builds the browser package, verifies `index.html`/`index.js`/`index.wasm`, and uploads it as an artifact. |
 
 `native` and `web` depend on `fast`. The `web` job is marked
