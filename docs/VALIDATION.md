@@ -77,6 +77,23 @@ pass given the API-correct integration, but are honestly reported as unverified:
    timing. Report the browser/device/resolution and actual measured fps. Do not
    claim support for untested devices.
 
+## Continuous integration
+
+`.github/workflows/ci.yml` runs on every push and pull request, in three tiers:
+
+| Job | Runner | What it proves |
+| --- | --- | --- |
+| **fast** | ubuntu-24.04 | Formatting (`clang-format-18 --dry-run --Werror`), `clang-tidy-18` with warnings-as-errors on the GPU-free sources, and the host logic tests (`tests/ocean_tests.cpp`). No engine SDK needed, so it is the quick gate on most changes. |
+| **native** | ubuntu-24.04 | `./init.sh` acquires the pinned Ludus SDK + Slang/SPIRV-Tools, builds the native (Vulkan) app — including the Slang → SPIR-V/WGSL shader build, with the pinned `spirv-val` actually running (ubuntu-24.04 has glibc 2.38+) — runs `ctest`, and asserts the generated shader artifacts (`ocean.h`, `*.spv`, `ocean.wgsl`) are present in the build. |
+| **web** | ubuntu-24.04 | `./init.sh --with-web` installs the Emscripten/WebGPU SDK, builds the browser package, verifies the self-contained `index.html`/`index.js`/`index.wasm`, and uploads it as an artifact. |
+
+`native` and `web` depend on `fast`. GPU rendering, interactive controls, and
+frame timing are still **not** exercised (headless runners have no GPU); CI
+proves the app formats, analyzes, tests, links against the SDK, and that the
+shader artifacts build and ship. A follow-up could add a software-GPU browser
+smoke (Playwright + SwiftShader under `xvfb`), mirroring the engine's
+`webgpu-probe` workflow.
+
 ## Honesty note on performance
 
 No frame-timing numbers are reported because no GPU run happened here. The single

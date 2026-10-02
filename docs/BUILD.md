@@ -146,6 +146,21 @@ cmake -S . -B out/build/linux-clang-development -G Ninja \
 cmake --build out/build/linux-clang-development
 ```
 
+## Continuous integration
+
+`.github/workflows/ci.yml` mirrors these commands on `ubuntu-24.04` runners:
+
+* **fast** — `clang-format-18`/`clang-tidy-18` + the GPU-free logic tests (no SDK).
+* **native** — `./init.sh` then `cmake --build --preset linux-clang-development`
+  and `ctest`; asserts the generated shader artifacts exist.
+* **web** — `./init.sh --with-web` then
+  `cmake --build --preset web-emscripten-development`; uploads the package.
+
+The `native`/`web` jobs install the engine's system prerequisites
+(`clang-18`, `lld-18`, `libwayland-dev`, `wayland-protocols`) before `./init.sh`
+so the engine bootstrap finds them satisfied. See
+[docs/VALIDATION.md](VALIDATION.md#continuous-integration).
+
 ## Shader rebuilds
 
 The shader artifacts rebuild automatically when `shaders/ocean.slang` (or its

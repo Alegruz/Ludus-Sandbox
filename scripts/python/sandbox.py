@@ -223,6 +223,33 @@ def install_ludus_sdk(
     return sdk_dir
 
 
+def install_ludus_web_sdk(ludus_source: Path) -> Path:
+    """Bootstrap the Emscripten/WebGPU toolchain and install the web SDK variant.
+    Returns the installed web SDK prefix. This drives the engine's own scripts so
+    the sandbox always uses the engine's supported web path."""
+    web_preset = "web-emscripten-development"
+
+    bootstrap = ludus_source / "scripts" / "bootstrap"
+    install_script = ludus_source / "scripts" / "install-sdk"
+    if not bootstrap.is_file():
+        raise RuntimeError(f"Missing Ludus bootstrap script: {bootstrap}")
+    if not install_script.is_file():
+        raise RuntimeError(f"Missing Ludus SDK install script: {install_script}")
+
+    # Acquire the pinned emsdk + web dependencies for the web preset.
+    run([str(bootstrap), web_preset], cwd=ludus_source)
+    run([str(install_script), web_preset], cwd=ludus_source)
+
+    web_sdk_dir = ludus_source / "out" / "install" / web_preset
+    if not web_sdk_dir.is_dir():
+        raise RuntimeError(
+            "Ludus web SDK install completed, but expected install directory "
+            f"does not exist: {web_sdk_dir}"
+        )
+
+    return web_sdk_dir
+
+
 def acquire_shader_tools(ludus_source: Path) -> tuple[Path, Path]:
     """Acquire the pinned, isolated Slang + SPIRV-Tools used by the shader
     helper, and return (slang_compiler, spirv_validator). These are host tools
@@ -318,13 +345,17 @@ def init_command(args: argparse.Namespace) -> None:
             preset=args.preset,
         )
 
-    # Optional separate web SDK prefix (install with the web preset). Discovered
-    # by convention; absent on native-only setups.
+    # Optional separate web SDK prefix (install with the web preset). An explicit
+    # --web-sdk-dir wins; otherwise --with-web installs it via the engine scripts;
+    # otherwise it is discovered by convention and left unset on native-only setups.
     web_sdk_dir = None
     if args.web_sdk_dir:
         candidate = Path(args.web_sdk_dir).expanduser().resolve()
-        if candidate.is_dir():
-            web_sdk_dir = candidate
+        if not candidate.is_dir():
+            raise RuntimeError(f"Provided --web-sdk-dir does not exist: {candidate}")
+        web_sdk_dir = candidate
+    elif args.with_web and not args.sdk_dir:
+        web_sdk_dir = install_ludus_web_sdk(ludus_source)
     else:
         candidate = ludus_source / "out" / "install" / "web-emscripten-development"
         if candidate.is_dir():
@@ -398,6 +429,16 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Path to an already-installed Emscripten/WebGPU Ludus SDK. Enables "
             "the browser preset. Defaults to LUDUS_SANDBOX_WEB_SDK_DIR."
+        ),
+    )
+
+    init_parser.add_argument(
+        "--with-web",
+        action="store_true",
+        help=(
+            "Also bootstrap the Emscripten toolchain and install the web SDK "
+            "variant, enabling the browser (WebGPU) preset. Ignored when "
+            "--sdk-dir or --web-sdk-dir is given."
         ),
     )
 

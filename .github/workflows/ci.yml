@@ -1,0 +1,160 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+# The sandbox app consumes Ludus only through its installed SDK. CI is tiered:
+#   * fast          - no engine; formatting, clang-tidy and the GPU-free logic
+#                     tests. This is the quick gate for most changes.
+#   * native        - acquires the pinned Ludus SDK + shader tools, builds the
+#                     native (Vulkan) app and shader, runs ctest. Proves the app
+#                     links against the SDK and the Slang -> SPIR-V/WGSL build
+#                     works with the pinned toolchain (ubuntu-24.04 has the
+#                     glibc 2.38+ the pinned spirv-val needs).
+#   * web           - builds the browser (Emscripten/WebGPU) package and uploads
+#                     it as an artifact.
+#
+# GPU rendering / interactive 60fps / screenshots are NOT run here (headless
+# runners have no GPU); see docs/VALIDATION.md.
+
+permissions:
+  contents: read
+
+jobs:
+  fast:
+    name: Fast checks (format, tidy, logic tests)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pinned Clang 18 tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq clang-18 clang-format-18 clang-tidy-18
+
+      - name: Verify source formatting
+        run: |
+          files=$(git ls-files 'src/*.cpp' 'src/*.h' 'src/**/*.cpp' 'src/**/*.h' 'tests/**/*.cpp' 'tools/**/*.cpp')
+          echo "Checking: $files"
+          clang-format-18 --dry-run --Werror $files
+
+      - name: Build and run the GPU-free logic tests
+        run: |
+          clang++-18 -std=c++23 -Wall -Wextra -Wpedantic -Werror -fno-exceptions -I src \
+            tests/ocean_tests.cpp \
+            src/ocean/ocean_settings.cpp src/ocean/ocean_clock.cpp src/ocean/ocean_uniforms.cpp \
+            -o ocean_tests
+          ./ocean_tests
+
+      - name: Static analysis (clang-tidy) on the GPU-free ocean sources
+        run: |
+          clang-tidy-18 \
+            src/ocean/ocean_settings.cpp src/ocean/ocean_clock.cpp src/ocean/ocean_uniforms.cpp \
+            --warnings-as-errors='*' \
+            -- -std=c++23 -I src
+
+  native:
+    name: Native SDK build + tests (Vulkan backend, no GPU run)
+    needs: fast
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    env:
+      CI: "true"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system prerequisites
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            git python3 python3-venv ca-certificates \
+            clang-18 lld-18 clang-format-18 clang-tidy-18 \
+            libwayland-dev wayland-protocols
+
+      - name: Cache pip downloads
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-sandbox
+
+      - name: Install CMake + Ninja for driving the presets
+        # The generated user preset points CMAKE_MAKE_PROGRAM at the engine's
+        # managed ninja; we just need a cmake/ctest front-end on PATH.
+        run: pipx install cmake ninja || pip install --user cmake ninja
+
+      - name: Acquire Ludus SDK + pinned shader tools and configure
+        # Pins the engine revision (config/ludus-version.txt), acquires the
+        # pinned Slang + SPIRV-Tools, installs the SDK and writes
+        # CMakeUserPresets.json wiring the SDK prefix and shader tools.
+        run: ./init.sh
+
+      - name: Build the native ocean app (shader -> SPIR-V/WGSL + link)
+        run: cmake --build --preset linux-clang-development --parallel 2
+
+      - name: Run tests
+        run: ctest --test-dir out/build/linux-clang-development --output-on-failure
+
+      - name: Confirm shader artifacts are present in the build
+        run: |
+          shader_dir=out/build/linux-clang-development/ludus-shaders/LudusSandbox/ocean
+          echo "Looking in: $shader_dir"
+          ls -la "$shader_dir"
+          test -f "$shader_dir/ocean.h"
+          test -f "$shader_dir/ocean.vertex.spv"
+          test -f "$shader_dir/ocean.fragment.spv"
+          test -f "$shader_dir/ocean.wgsl"
+
+  web:
+    name: Browser SDK build + package (WebGPU backend)
+    needs: fast
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    env:
+      CI: "true"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system prerequisites
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            git python3 python3-venv ca-certificates \
+            clang-18 lld-18 clang-format-18 clang-tidy-18 \
+            libwayland-dev wayland-protocols
+
+      - name: Cache pip downloads
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-sandbox
+
+      - name: Install CMake + Ninja for driving the presets
+        run: pipx install cmake ninja || pip install --user cmake ninja
+
+      - name: Acquire Ludus SDK (native + web) + pinned shader tools and configure
+        # The engine web SDK is installed and the browser preset is enabled when
+        # the web SDK prefix and the emsdk toolchain are present.
+        run: ./init.sh --with-web
+
+      - name: Build the browser ocean package
+        run: cmake --build --preset web-emscripten-development --parallel 2
+
+      - name: Verify the self-contained web package
+        run: |
+          pkg=out/build/web-emscripten-development
+          echo "Package dir: $pkg"
+          test -f "$pkg/index.html"
+          test -f "$pkg/index.js"
+          test -f "$pkg/index.wasm"
+          ls -la "$pkg"
+
+      - name: Upload browser package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: drift-ocean-web
+          path: |
+            out/build/web-emscripten-development/index.html
+            out/build/web-emscripten-development/index.js
+            out/build/web-emscripten-development/index.wasm
+          if-no-files-found: error
