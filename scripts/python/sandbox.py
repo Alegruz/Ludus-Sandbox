@@ -14,6 +14,13 @@ from pathlib import Path
 REPOSITORY_URL = "https://github.com/Alegruz/Ludus.git"
 DEFAULT_PRESET = "linux-clang-development"
 
+# The SDK variant Ludus-Sandbox consumes. The public fullscreen rendering API
+# and the ludus_compile_shader helper (Prompts 1 & 2 handoff) require the engine
+# revision pinned in config/ludus-version.txt (PR #51, "Add public fullscreen
+# rendering API and SDK shader tooling") installed with this preset. See
+# docs/BUILD.md for the full, reproducible recipe.
+SDK_VARIANT = DEFAULT_PRESET
+
 
 def run(
     args: list[str],
@@ -33,6 +40,9 @@ def write_user_presets(
     repo_root: Path,
     ludus_source: Path,
     sdk_dir: Path,
+    slang_compiler: Path,
+    spirv_validator: Path,
+    web_sdk_dir: Path | None,
 ) -> None:
     tool_venv = ludus_source / "out" / "host-tools" / "venv" / "bin"
     tool_bin = ludus_source / "out" / "host-tools" / "bin"
@@ -47,26 +57,77 @@ def write_user_presets(
                 f"Expected Ludus-managed tool does not exist: {tool}"
             )
 
-    presets = {
-        "version": 6,
-        "configurePresets": [
+    # The native SDK's LudusConfig.cmake does find_dependency(volk CONFIG), whose
+    # package config files live in the engine's Conan output dir. The consumer
+    # must therefore see BOTH the SDK install prefix and that Conan dir on
+    # CMAKE_PREFIX_PATH (matching the engine's own SDK consumer invocation).
+    conan_dir = ludus_source / "out" / "conan" / DEFAULT_PRESET
+    native_prefix_path = str(sdk_dir)
+    if conan_dir.is_dir():
+        native_prefix_path = f"{sdk_dir};{conan_dir}"
+
+    configure_presets = [
+        {
+            "name": "linux-clang-development",
+            "displayName": "Linux Clang Development",
+            "inherits": "linux-clang-development-base",
+            "cacheVariables": {
+                "CMAKE_MAKE_PROGRAM": str(ninja),
+                "CMAKE_CXX_COMPILER": str(clangxx),
+                "CMAKE_PREFIX_PATH": native_prefix_path,
+                "LUDUS_SLANG_COMPILER": str(slang_compiler),
+                "LUDUS_SPIRV_VALIDATOR": str(spirv_validator),
+            },
+        }
+    ]
+    build_presets = [
+        {
+            "name": "linux-clang-development",
+            "configurePreset": "linux-clang-development",
+        }
+    ]
+
+    # Add a browser (Emscripten/WebGPU) preset when the web SDK and the engine's
+    # emscripten toolchain are present. Paths are discovered, never hardcoded.
+    emscripten_toolchain = (
+        ludus_source
+        / "out"
+        / "host-tools"
+        / "emsdk"
+        / "upstream"
+        / "emscripten"
+        / "cmake"
+        / "Modules"
+        / "Platform"
+        / "Emscripten.cmake"
+    )
+    if web_sdk_dir is not None and emscripten_toolchain.is_file():
+        configure_presets.append(
             {
-                "name": "linux-clang-development",
-                "displayName": "Linux Clang Development",
-                "inherits": "linux-clang-development-base",
+                "name": "web-emscripten-development",
+                "displayName": "Web Emscripten Development",
+                "inherits": "web-emscripten-development-base",
+                "toolchainFile": str(emscripten_toolchain),
                 "cacheVariables": {
                     "CMAKE_MAKE_PROGRAM": str(ninja),
-                    "CMAKE_CXX_COMPILER": str(clangxx),
-                    "CMAKE_PREFIX_PATH": str(sdk_dir),
+                    "CMAKE_PREFIX_PATH": str(web_sdk_dir),
+                    "CMAKE_FIND_ROOT_PATH": str(web_sdk_dir),
+                    "LUDUS_SLANG_COMPILER": str(slang_compiler),
+                    "LUDUS_SPIRV_VALIDATOR": str(spirv_validator),
                 },
             }
-        ],
-        "buildPresets": [
+        )
+        build_presets.append(
             {
-                "name": "linux-clang-development",
-                "configurePreset": "linux-clang-development",
+                "name": "web-emscripten-development",
+                "configurePreset": "web-emscripten-development",
             }
-        ],
+        )
+
+    presets = {
+        "version": 6,
+        "configurePresets": configure_presets,
+        "buildPresets": build_presets,
     }
 
     path = repo_root / "CMakeUserPresets.json"
@@ -153,14 +214,32 @@ def install_ludus_sdk(
     ludus_source: Path,
     preset: str,
 ) -> Path:
-    install_script = ludus_source / "scripts" / "install-sdk"
+    """Build and install the native Ludus SDK to a prefix we consume.
 
-    if not install_script.is_file():
-        raise RuntimeError(f"Missing Ludus SDK install script: {install_script}")
+    We drive ``scripts/build`` + ``cmake --install`` directly instead of the
+    engine's ``install-sdk`` wrapper. ``install-sdk`` additionally runs an
+    engine-owned SDK-consumer self-test that currently fails because the
+    installed ``LudusConfig.cmake`` does not ``find_dependency(Threads)`` even
+    though ``Ludus::FoundationProfiling`` links ``Threads::Threads`` PUBLIC (see
+    docs/VALIDATION.md "Known engine SDK packaging gap"). The SDK *install*
+    itself is complete and valid; only that self-test fails. Our consumer works
+    around the gap with its own ``find_package(Threads)`` call."""
+    build_script = ludus_source / "scripts" / "build"
+    if not build_script.is_file():
+        raise RuntimeError(f"Missing Ludus build script: {build_script}")
 
-    run([str(install_script), preset], cwd=ludus_source)
+    cmake = ludus_source / "out" / "host-tools" / "venv" / "bin" / "cmake"
+    if not cmake.is_file():
+        raise RuntimeError(f"Expected Ludus-managed CMake does not exist: {cmake}")
 
+    run([str(build_script), preset], cwd=ludus_source)
+
+    build_dir = ludus_source / "out" / "build" / preset
     sdk_dir = ludus_source / "out" / "install" / preset
+    run(
+        [str(cmake), "--install", str(build_dir), "--prefix", str(sdk_dir)],
+        cwd=ludus_source,
+    )
 
     if not sdk_dir.is_dir():
         raise RuntimeError(
@@ -171,10 +250,80 @@ def install_ludus_sdk(
     return sdk_dir
 
 
+def install_ludus_web_sdk(ludus_source: Path) -> Path:
+    """Acquire the Emscripten/WebGPU toolchain, build the engine's web targets,
+    and install them to a prefix the sandbox can consume. The engine does not
+    expose a relocatable web SDK via ``install-sdk``; the supported path is
+    ``web init`` (acquire emsdk) -> ``web build`` -> ``cmake --install`` of the
+    web build tree (see fullscreen-rendering-handoff.md). Returns the prefix."""
+    web_preset = "web-emscripten-development"
+
+    init_script = ludus_source / "scripts" / "init"
+    build_script = ludus_source / "scripts" / "build"
+    if not init_script.is_file() or not build_script.is_file():
+        raise RuntimeError(f"Missing Ludus init/build scripts under {ludus_source / 'scripts'}")
+
+    # The engine routes web-emscripten-* presets to its browser pipeline. Acquire
+    # the pinned emsdk and configure (init --preset-only), then build the web
+    # targets in-tree. The preset is passed positionally.
+    run([str(init_script), web_preset, "--preset-only"], cwd=ludus_source)
+    run([str(build_script), web_preset], cwd=ludus_source)
+
+    # Install the built web tree to a prefix we can point CMAKE_PREFIX_PATH at.
+    cmake = ludus_source / "out" / "host-tools" / "venv" / "bin" / "cmake"
+    if not cmake.is_file():
+        raise RuntimeError(f"Expected Ludus-managed CMake does not exist: {cmake}")
+
+    build_dir = ludus_source / "out" / "build" / web_preset
+    web_sdk_dir = ludus_source / "out" / "install" / web_preset
+    run(
+        [str(cmake), "--install", str(build_dir), "--prefix", str(web_sdk_dir)],
+        cwd=ludus_source,
+    )
+
+    if not web_sdk_dir.is_dir():
+        raise RuntimeError(
+            "Ludus web SDK install completed, but expected install directory "
+            f"does not exist: {web_sdk_dir}"
+        )
+
+    return web_sdk_dir
+
+
+def acquire_shader_tools(ludus_source: Path) -> tuple[Path, Path]:
+    """Acquire the pinned, isolated Slang + SPIRV-Tools used by the shader
+    helper, and return (slang_compiler, spirv_validator). These are host tools
+    kept separate from the target compiler; no compiler/validator is linked into
+    the game, and no network access is needed once acquired."""
+    probe = ludus_source / "scripts" / "shader-probe"
+
+    if not probe.is_file():
+        raise RuntimeError(f"Missing Ludus shader-probe script: {probe}")
+
+    # Idempotent: re-running verifies the pinned digests without re-downloading.
+    run([str(probe), "bootstrap"], cwd=ludus_source)
+
+    tools = ludus_source / "out" / "shader-tools"
+    slang = tools / "slang" / "bin" / "slangc"
+    validators = list(tools.glob("spirv-tools/**/spirv-val"))
+
+    if not slang.is_file():
+        raise RuntimeError(f"Expected pinned Slang compiler not found: {slang}")
+    if not validators:
+        raise RuntimeError(
+            "Expected pinned spirv-val not found under "
+            f"{tools / 'spirv-tools'}"
+        )
+
+    return slang, validators[0]
+
+
 def configure_sandbox(
     repo_root: Path,
     ludus_source: Path,
     preset: str,
+    slang_compiler: Path,
+    spirv_validator: Path,
 ) -> None:
     cmake = (
         ludus_source
@@ -191,16 +340,68 @@ def configure_sandbox(
         )
 
     run(
-        [str(cmake), "--preset", preset],
+        [
+            str(cmake),
+            "--preset",
+            preset,
+            # The ludus_compile_shader helper needs the pinned host tools. They
+            # are passed explicitly (not hardcoded) so a different developer's
+            # paths or a local SDK work without editing CMake.
+            f"-DLUDUS_SLANG_COMPILER={slang_compiler}",
+            f"-DLUDUS_SPIRV_VALIDATOR={spirv_validator}",
+        ],
         cwd=repo_root,
     )
 
-    
+
+def configure_sandbox_web(
+    repo_root: Path,
+    ludus_source: Path,
+    slang_compiler: Path,
+    spirv_validator: Path,
+) -> None:
+    """Configure the browser (Emscripten/WebGPU) preset so that
+    ``cmake --build --preset web-emscripten-development`` has a build tree.
+
+    Emscripten cross-compilation must run under the emsdk's ``emcmake`` wrapper
+    so emcc/the toolchain are discovered; the generated user preset supplies the
+    toolchain file, prefix and shader tools."""
+    web_preset = "web-emscripten-development"
+
+    cmake = ludus_source / "out" / "host-tools" / "venv" / "bin" / "cmake"
+    emcmake = (
+        ludus_source
+        / "out"
+        / "host-tools"
+        / "emsdk"
+        / "upstream"
+        / "emscripten"
+        / "emcmake"
+    )
+    if not cmake.is_file():
+        raise RuntimeError(f"Expected Ludus-managed CMake does not exist: {cmake}")
+    if not emcmake.is_file():
+        raise RuntimeError(f"Expected emsdk emcmake does not exist: {emcmake}")
+
+    run(
+        [
+            str(emcmake),
+            str(cmake),
+            "--preset",
+            web_preset,
+            f"-DLUDUS_SLANG_COMPILER={slang_compiler}",
+            f"-DLUDUS_SPIRV_VALIDATOR={spirv_validator}",
+        ],
+        cwd=repo_root,
+    )
+
+
 def init_command(args: argparse.Namespace) -> None:
     repo_root = Path(__file__).resolve().parents[2]
 
     print("Initializing Ludus Sandbox")
     print(f"Repository: {repo_root}")
+    print(f"SDK variant: {args.preset}")
 
     ludus_source = acquire_ludus(
         repo_root=repo_root,
@@ -209,33 +410,88 @@ def init_command(args: argparse.Namespace) -> None:
 
     initialize_ludus(ludus_source)
 
-    sdk_dir = install_ludus_sdk(
-        ludus_source=ludus_source,
-        preset=args.preset,
-    )
+    # Acquire the pinned, isolated shader tools (Slang + SPIRV-Tools). Required
+    # by ludus_compile_shader; separate from the target compiler.
+    slang_compiler, spirv_validator = acquire_shader_tools(ludus_source)
+
+    # A developer iterating against an already-installed SDK can point at it
+    # directly (--sdk-dir / LUDUS_SANDBOX_SDK_DIR) to skip the engine rebuild.
+    if args.sdk_dir:
+        sdk_dir = Path(args.sdk_dir).expanduser().resolve()
+        if not sdk_dir.is_dir():
+            raise RuntimeError(f"Provided --sdk-dir does not exist: {sdk_dir}")
+        print(f"Using pre-installed Ludus SDK: {sdk_dir}")
+    else:
+        sdk_dir = install_ludus_sdk(
+            ludus_source=ludus_source,
+            preset=args.preset,
+        )
+
+    # Optional separate web SDK prefix (install with the web preset). An explicit
+    # --web-sdk-dir wins; otherwise --with-web installs it via the engine scripts;
+    # otherwise it is discovered by convention and left unset on native-only setups.
+    web_sdk_dir = None
+    if args.web_sdk_dir:
+        candidate = Path(args.web_sdk_dir).expanduser().resolve()
+        if not candidate.is_dir():
+            raise RuntimeError(f"Provided --web-sdk-dir does not exist: {candidate}")
+        web_sdk_dir = candidate
+    elif args.with_web and not args.sdk_dir:
+        web_sdk_dir = install_ludus_web_sdk(ludus_source)
+    else:
+        candidate = ludus_source / "out" / "install" / "web-emscripten-development"
+        if candidate.is_dir():
+            web_sdk_dir = candidate
 
     write_user_presets(
         repo_root=repo_root,
         ludus_source=ludus_source,
         sdk_dir=sdk_dir,
+        slang_compiler=slang_compiler,
+        spirv_validator=spirv_validator,
+        web_sdk_dir=web_sdk_dir,
     )
 
     configure_sandbox(
         repo_root=repo_root,
         ludus_source=ludus_source,
         preset=args.preset,
+        slang_compiler=slang_compiler,
+        spirv_validator=spirv_validator,
     )
+
+    # Configure the browser preset too, when the web SDK and the emsdk toolchain
+    # are available, so the web build tree exists for `cmake --build --preset
+    # web-emscripten-development`. Mirrors the condition in write_user_presets.
+    emscripten_emcmake = (
+        ludus_source / "out" / "host-tools" / "emsdk" / "upstream" / "emscripten" / "emcmake"
+    )
+    web_configured = False
+    if web_sdk_dir is not None and emscripten_emcmake.is_file():
+        configure_sandbox_web(
+            repo_root=repo_root,
+            ludus_source=ludus_source,
+            slang_compiler=slang_compiler,
+            spirv_validator=spirv_validator,
+        )
+        web_configured = True
 
     print()
     print("Ludus Sandbox initialization complete.")
     print()
-    print(f"Ludus source: {ludus_source}")
-    print(f"Ludus SDK:    {sdk_dir}")
+    print(f"Ludus source:     {ludus_source}")
+    print(f"Ludus SDK:        {sdk_dir}")
+    if web_sdk_dir is not None:
+        print(f"Ludus web SDK:    {web_sdk_dir}")
+    print(f"Slang compiler:   {slang_compiler}")
+    print(f"SPIR-V validator: {spirv_validator}")
     print()
     print("The sandbox has been configured but not built.")
     print()
     print("Build with:")
     print(f"  cmake --build --preset {args.preset}")
+    if web_configured:
+        print("  cmake --build --preset web-emscripten-development")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -255,7 +511,37 @@ def build_parser() -> argparse.ArgumentParser:
     init_parser.add_argument(
         "--preset",
         default=DEFAULT_PRESET,
-        help=f"CMake/Ludus preset to use (default: {DEFAULT_PRESET}).",
+        help=f"CMake/Ludus preset / SDK variant to use (default: {DEFAULT_PRESET}).",
+    )
+
+    init_parser.add_argument(
+        "--sdk-dir",
+        default=os.environ.get("LUDUS_SANDBOX_SDK_DIR"),
+        help=(
+            "Path to an already-installed native Ludus SDK (CMAKE_PREFIX_PATH). "
+            "Lets a developer iterate without rebuilding the engine. Defaults to "
+            "the LUDUS_SANDBOX_SDK_DIR environment variable if set. No path is "
+            "hardcoded."
+        ),
+    )
+
+    init_parser.add_argument(
+        "--web-sdk-dir",
+        default=os.environ.get("LUDUS_SANDBOX_WEB_SDK_DIR"),
+        help=(
+            "Path to an already-installed Emscripten/WebGPU Ludus SDK. Enables "
+            "the browser preset. Defaults to LUDUS_SANDBOX_WEB_SDK_DIR."
+        ),
+    )
+
+    init_parser.add_argument(
+        "--with-web",
+        action="store_true",
+        help=(
+            "Also bootstrap the Emscripten toolchain and install the web SDK "
+            "variant, enabling the browser (WebGPU) preset. Ignored when "
+            "--sdk-dir or --web-sdk-dir is given."
+        ),
     )
 
     init_parser.set_defaults(func=init_command)

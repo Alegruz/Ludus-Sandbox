@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Drift — Ludus ocean playground</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    font: 14px/1.4 system-ui, sans-serif;
+    color: #e8eef6;
+    background: #0a1222;
+    overflow: hidden;
+  }
+  /* The canvas fills the whole viewport (overhead ocean fills the scene). */
+  #canvas {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+    background: #071022;
+    touch-action: none;
+  }
+  #canvas:focus-visible { outline: 3px solid #ffd27d; outline-offset: -3px; }
+
+  /* Status line, top-centre, non-interactive so it never steals canvas input. */
+  #status {
+    position: fixed;
+    top: 10px; left: 50%;
+    transform: translateX(-50%);
+    padding: 6px 14px;
+    border-radius: 999px;
+    background: rgba(7, 16, 34, 0.72);
+    backdrop-filter: blur(6px);
+    pointer-events: none;
+    max-width: 90vw;
+  }
+  #status[data-state="failed"], #status[data-state="device-lost"] { color: #ffb4a2; }
+
+  /* Collapsible tuning panel, top-right, over the canvas. */
+  #panel {
+    position: fixed;
+    top: 10px; right: 10px;
+    width: min(320px, calc(100vw - 20px));
+    max-height: calc(100vh - 20px);
+    overflow: auto;
+    background: rgba(10, 18, 34, 0.86);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 12px;
+    padding: 0;
+  }
+  #panel > summary {
+    cursor: pointer;
+    list-style: none;
+    padding: 10px 14px;
+    font-weight: 600;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    user-select: none;
+  }
+  #panel > summary::-webkit-details-marker { display: none; }
+  #panel > summary::after { content: '▸'; opacity: 0.7; }
+  #panel[open] > summary::after { content: '▾'; }
+  .panel-body { padding: 4px 14px 14px; display: grid; gap: 12px; }
+  fieldset { border: 1px solid rgba(255,255,255,0.12); border-radius: 8px; margin: 0; padding: 8px 10px; }
+  legend { padding: 0 6px; opacity: 0.85; font-weight: 600; }
+  .row { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 6px; margin: 6px 0; }
+  .row label { font-size: 13px; }
+  .row output { font-variant-numeric: tabular-nums; opacity: 0.85; min-width: 48px; text-align: right; }
+  input[type="range"] { grid-column: 1 / -1; width: 100%; }
+  .colors { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .colors label { display: flex; flex-direction: column; gap: 2px; font-size: 12px; }
+  input[type="color"] { width: 100%; height: 28px; padding: 0; border: none; background: none; }
+  .btns { display: flex; flex-wrap: wrap; gap: 6px; }
+  button {
+    font: inherit; padding: 5px 10px; border-radius: 7px; cursor: pointer;
+    border: 1px solid rgba(255,255,255,0.2);
+    background: #16233c; color: inherit;
+  }
+  button:hover { background: #1d2d4c; }
+  button[aria-pressed="true"] { background: #2b6cb0; border-color: #4a90d9; }
+  .presets button { flex: 1; }
+  textarea {
+    width: 100%; min-height: 92px; font: 12px/1.3 ui-monospace, monospace;
+    background: #0b1526; color: #cfe0f5; border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 6px; padding: 6px; resize: vertical;
+  }
+  #io-message { font-size: 12px; min-height: 1.2em; }
+  #io-message[data-kind="error"] { color: #ffb4a2; }
+  #io-message[data-kind="ok"] { color: #9ae6b4; }
+  .hint { font-size: 12px; opacity: 0.7; }
+</style>
+</head>
+<body>
+
+<canvas id="canvas" width="1280" height="720" tabindex="0" aria-label="Ocean scene. Click to focus; the tuning panel is to the right."></canvas>
+<p id="status" role="status" aria-live="polite" data-state="loading" data-frames="0">Loading the ocean…</p>
+
+<details id="panel" open>
+  <summary aria-label="Ocean tuning panel">Drift — ocean controls</summary>
+  <div class="panel-body">
+
+    <div class="btns presets" role="group" aria-label="Presets">
+      <button type="button" data-preset="0">Calm</button>
+      <button type="button" data-preset="1">Drifting</button>
+      <button type="button" data-preset="2">Choppy</button>
+    </div>
+
+    <div class="btns" role="group" aria-label="Playback">
+      <button type="button" id="pause" aria-pressed="false">Pause</button>
+      <button type="button" id="reset-sim">Reset time</button>
+      <button type="button" id="reset-all">Reset all</button>
+      <button type="button" id="restart">Restart</button>
+    </div>
+
+    <fieldset>
+      <legend>Current</legend>
+      <div class="row"><label for="dir">Direction (°)</label><output id="dir-out">35</output>
+        <input type="range" id="dir" min="0" max="360" step="1" value="35"></div>
+      <div class="row"><label for="speed">Speed (m/s)</label><output id="speed-out">1.5</output>
+        <input type="range" id="speed" min="0" max="12" step="0.1" value="1.5"></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Waves</legend>
+      <div class="row"><label for="scale">Scale (m)</label><output id="scale-out">18</output>
+        <input type="range" id="scale" min="3" max="60" step="0.5" value="18"></div>
+      <div class="row"><label for="anim">Animation speed</label><output id="anim-out">1.0</output>
+        <input type="range" id="anim" min="0" max="4" step="0.05" value="1"></div>
+      <div class="row"><label for="intensity">Intensity</label><output id="intensity-out">0.55</output>
+        <input type="range" id="intensity" min="0" max="1" step="0.01" value="0.55"></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Foam &amp; palette</legend>
+      <div class="row"><label for="foam">Foam amount</label><output id="foam-out">0.35</output>
+        <input type="range" id="foam" min="0" max="1" step="0.01" value="0.35"></div>
+      <div class="colors">
+        <label>Deep<input type="color" id="deep" value="#071230"></label>
+        <label>Mid<input type="color" id="mid" value="#11456b"></label>
+        <label>Shallow<input type="color" id="shallow" value="#22858a"></label>
+        <label>Foam<input type="color" id="foamcol" value="#ecf3e5"></label>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Settings (versioned JSON)</legend>
+      <div class="btns">
+        <button type="button" id="copy">Copy</button>
+        <button type="button" id="export">Export ↧</button>
+        <button type="button" id="import">Import ↥</button>
+      </div>
+      <textarea id="json" spellcheck="false" aria-label="Settings JSON"></textarea>
+      <p id="io-message" role="status" aria-live="polite"></p>
+      <p class="hint">Copy/Export fills the box with the current settings. Edit it, then Import to apply. Invalid input is reported here and does not change the scene.</p>
+    </fieldset>
+
+  </div>
+</details>
+
+<script>
+// ---------------------------------------------------------------------------
+// DOM <-> application bridge. Every call targets a C EMSCRIPTEN_KEEPALIVE
+// export (Module._OceanX). The scene reads only the settings store, so the
+// engine never sees these controls. All handlers run on the main thread.
+// ---------------------------------------------------------------------------
+var Module = {
+  onAbort: function (reason) {
+    const s = document.getElementById('status');
+    s.textContent = 'The playground could not load. Please reload the page.';
+    s.dataset.state = 'failed';
+    console.error('Ludus startup failed:', reason);
+  }
+};
+
+const byId = (id) => document.getElementById(id);
+const call = (name, ...args) => { try { return Module['_' + name]?.(...args); } catch (e) { console.warn(name, e); } };
+
+// Keep canvas input ownership explicit: clicking the canvas focuses it; any
+// pointer/keydown inside the panel is kept there (stopPropagation) so it never
+// leaks to the canvas/scene.
+const panel = byId('panel');
+['pointerdown', 'keydown', 'wheel'].forEach((type) =>
+  panel.addEventListener(type, (e) => e.stopPropagation(), { passive: true }));
+const canvas = byId('canvas');
+canvas.addEventListener('pointerdown', () => canvas.focus());
+
+// --- Sliders ---------------------------------------------------------------
+function wireSlider(id, outId, fn, digits) {
+  const el = byId(id), out = byId(outId);
+  const update = () => {
+    const v = parseFloat(el.value);
+    out.textContent = digits != null ? v.toFixed(digits) : v;
+    call(fn, v);
+  };
+  el.addEventListener('input', update);
+  return { el, out, set: (v) => { el.value = v; out.textContent = digits != null ? Number(v).toFixed(digits) : v; } };
+}
+const sliders = {
+  dir: wireSlider('dir', 'dir-out', 'OceanSetCurrentDirection', 0),
+  speed: wireSlider('speed', 'speed-out', 'OceanSetCurrentSpeed', 1),
+  scale: wireSlider('scale', 'scale-out', 'OceanSetWaveScale', 1),
+  anim: wireSlider('anim', 'anim-out', 'OceanSetWaveAnimationSpeed', 2),
+  intensity: wireSlider('intensity', 'intensity-out', 'OceanSetWaveIntensity', 2),
+  foam: wireSlider('foam', 'foam-out', 'OceanSetFoamAmount', 2),
+};
+
+// --- Colors ----------------------------------------------------------------
+const hexToRgb = (hex) => {
+  const n = parseInt(hex.slice(1), 16);
+  return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
+};
+const rgbToHex = (r, g, b) => '#' + [r, g, b]
+  .map((c) => Math.round(Math.max(0, Math.min(1, c)) * 255).toString(16).padStart(2, '0')).join('');
+function wireColor(id, fn) {
+  const el = byId(id);
+  el.addEventListener('input', () => call(fn, ...hexToRgb(el.value)));
+  return el;
+}
+const colors = {
+  deep: wireColor('deep', 'OceanSetDeepColor'),
+  mid: wireColor('mid', 'OceanSetMidColor'),
+  shallow: wireColor('shallow', 'OceanSetShallowColor'),
+  foamcol: wireColor('foamcol', 'OceanSetFoamColor'),
+};
+
+// --- Presets / playback ----------------------------------------------------
+document.querySelectorAll('[data-preset]').forEach((btn) =>
+  btn.addEventListener('click', () => call('OceanApplyPreset', Number(btn.dataset.preset))));
+
+const pauseBtn = byId('pause');
+pauseBtn.addEventListener('click', () => {
+  const paused = call('OceanIsPaused') ? 0 : 1;
+  call('OceanSetPaused', paused);
+  pauseBtn.setAttribute('aria-pressed', String(!!paused));
+  pauseBtn.textContent = paused ? 'Resume' : 'Pause';
+});
+byId('reset-sim').addEventListener('click', () => call('OceanResetSimulation'));
+byId('reset-all').addEventListener('click', () => call('OceanResetSettings'));
+byId('restart').addEventListener('click', () => call('OceanRestart'));
+
+// --- Settings JSON import/export ------------------------------------------
+const jsonBox = byId('json');
+const ioMessage = byId('io-message');
+function setMessage(text, kind) { ioMessage.textContent = text; ioMessage.dataset.kind = kind || ''; }
+
+function readExport() {
+  const ptr = call('OceanExportJson');
+  if (!ptr) return '';
+  const text = Module.UTF8ToString(ptr);
+  call('OceanFreeString', ptr);
+  return text;
+}
+byId('export').addEventListener('click', () => { jsonBox.value = readExport(); setMessage('Exported current settings.', 'ok'); });
+byId('copy').addEventListener('click', async () => {
+  const text = readExport(); jsonBox.value = text;
+  try { await navigator.clipboard.writeText(text); setMessage('Copied to clipboard.', 'ok'); }
+  catch { setMessage('Copied into the box (clipboard unavailable).', 'ok'); }
+});
+byId('import').addEventListener('click', () => {
+  const text = jsonBox.value;
+  const bytes = Module.lengthBytesUTF8(text) + 1;
+  const ptr = Module._malloc(bytes);
+  Module.stringToUTF8(text, ptr, bytes);
+  const resultPtr = call('OceanImportJson', ptr);
+  Module._free(ptr);
+  const message = resultPtr ? Module.UTF8ToString(resultPtr) : 'Import failed.';
+  if (resultPtr) call('OceanFreeString', resultPtr);
+  if (message === '') setMessage('Settings imported.', 'ok');
+  else setMessage(message, 'error');
+});
+
+// --- Reflect external settings changes (preset/reset/import) into the UI ----
+globalThis.__oceanOnSettings = function (json) {
+  let s; try { s = JSON.parse(json); } catch { return; }
+  sliders.dir.set(s.currentDirectionDegrees);
+  sliders.speed.set(s.currentSpeed);
+  sliders.scale.set(s.waveScale);
+  sliders.anim.set(s.waveAnimationSpeed);
+  sliders.intensity.set(s.waveIntensity);
+  sliders.foam.set(s.foamAmount);
+  if (s.deepColor) colors.deep.value = rgbToHex(...s.deepColor);
+  if (s.midColor) colors.mid.value = rgbToHex(...s.midColor);
+  if (s.shallowColor) colors.shallow.value = rgbToHex(...s.shallowColor);
+  if (s.foamColor) colors.foamcol.value = rgbToHex(...s.foamColor);
+};
+
+// --- Page visibility: freeze while hidden, resume cleanly ------------------
+document.addEventListener('visibilitychange', () => call('OceanSetVisible', document.hidden ? 0 : 1));
+</script>
+
+<script src="index.js" onerror="Module.onAbort('failed to load module script')"></script>
+</body>
+</html>
