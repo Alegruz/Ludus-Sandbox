@@ -40,9 +40,10 @@ a GPU-free scene/tuning layer and an accessible tuning panel.
 | [docs/DESIGN.md](docs/DESIGN.md) | World units, coordinate orientation, aspect-correct mapping, current/time continuity, architecture, and the uniform contract. |
 | [docs/VALIDATION.md](docs/VALIDATION.md) | Honest validation results: what was verified here, what requires a GPU host, and how to reproduce the remaining checks. |
 
-CI (`.github/workflows/ci.yml`) runs three tiers on every push/PR: a fast
-format + clang-tidy + GPU-free-tests gate, a native SDK build + `ctest`, and a
-browser (WebGPU) package build whose artifact is uploaded. See
+CI (`.github/workflows/ci.yml`) runs three jobs on every push/PR, all green:
+a fast format + clang-tidy + GPU-free-tests gate, a native SDK build + `ctest`
+(with real `spirv-val`), and a browser (WebGPU) package build whose artifact is
+uploaded. See
 [docs/VALIDATION.md](docs/VALIDATION.md#continuous-integration) for details.
 
 ## Quick start

@@ -110,12 +110,10 @@ jobs:
     needs: fast
     runs-on: ubuntu-24.04
     timeout-minutes: 40
-    # Best-effort for now: the engine exposes no relocatable web SDK via
-    # install-sdk, so the sandbox builds the engine web tree and installs it to a
-    # prefix (see scripts/python/sandbox.py install_ludus_web_sdk). This path is
-    # not yet verified end-to-end on a runner, so a failure here does not block
-    # the PR; the native job remains the hard gate for SDK linkage + shaders.
-    continue-on-error: true
+    # The engine exposes no relocatable web SDK via install-sdk, so the sandbox
+    # builds the engine web tree and installs it to a prefix, then configures and
+    # builds the browser package (see scripts/python/sandbox.py). Verified green
+    # on CI, so this is a hard gate.
     env:
       CI: "true"
     steps:

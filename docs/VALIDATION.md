@@ -85,14 +85,14 @@ pass given the API-correct integration, but are honestly reported as unverified:
 | --- | --- | --- |
 | **fast** | ubuntu-24.04 | Formatting (`clang-format-18 --dry-run --Werror`), `clang-tidy-18` with warnings-as-errors on the GPU-free sources, and the host logic tests (`tests/ocean_tests.cpp`). No engine SDK needed, so it is the quick gate on most changes. |
 | **native** | ubuntu-24.04 | `./init.sh` acquires the pinned Ludus SDK + Slang/SPIRV-Tools, builds the native (Vulkan) app — including the Slang → SPIR-V/WGSL shader build, with the pinned `spirv-val` actually running (ubuntu-24.04 has glibc 2.38+) — runs `ctest`, and asserts the generated shader artifacts (`ocean.h`, `*.spv`, `ocean.wgsl`) are present in the build. **This job passes green on CI**, confirming end-to-end SDK linkage and the real SPIR-V validation that the GPU-less dev sandbox could not run. |
-| **web** (best-effort) | ubuntu-24.04 | `./init.sh --with-web` acquires the Emscripten toolchain, builds the engine web tree and installs it to a prefix, builds the browser package, verifies `index.html`/`index.js`/`index.wasm`, and uploads it as an artifact. |
+| **web** | ubuntu-24.04 | `./init.sh --with-web` acquires the Emscripten toolchain, builds the engine web tree and installs it to a prefix, configures and builds the browser package, verifies `index.html`/`index.js`/`index.wasm`, and uploads it as an artifact. **This job passes green on CI.** |
 
-`native` and `web` depend on `fast`. The `web` job is marked
-`continue-on-error` for now: the engine exposes no relocatable web SDK via
-`install-sdk`, so the sandbox builds the engine web tree and `cmake --install`s
-it to a prefix (`install_ludus_web_sdk` in `scripts/python/sandbox.py`); that
-path is not yet verified end-to-end on a runner, so a web failure does not block
-the PR. The **native** job is the hard gate for SDK linkage + shader build.
+`native` and `web` depend on `fast`. All three jobs pass green on CI, so each is
+a hard gate. The `native` job proves end-to-end SDK linkage and the real
+`spirv-val` SPIR-V validation; the `web` job proves the Emscripten/WebGPU
+package builds and ships. (The web SDK is consumed via a build-tree
+`cmake --install` because the engine exposes no relocatable web SDK through
+`install-sdk`; see `install_ludus_web_sdk` in `scripts/python/sandbox.py`.)
 
 GPU rendering, interactive controls, and frame timing are still **not**
 exercised (headless runners have no GPU); CI proves the app formats, analyzes,
