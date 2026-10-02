@@ -100,6 +100,45 @@ tests, links against the SDK, and that the shader artifacts build and ship. A
 follow-up could add a software-GPU browser smoke (Playwright + SwiftShader under
 `xvfb`), mirroring the engine's `webgpu-probe` workflow.
 
+## Known engine SDK packaging gap (Threads)
+
+While wiring CI we hit a genuine engine SDK packaging bug, surfaced on a clean
+`ubuntu-24.04` runner consuming the installed SDK:
+
+```
+CMake Error at .../lib/cmake/Ludus/LudusTargets.cmake (set_target_properties):
+  The link interface of target "Ludus::FoundationProfiling" contains:
+    Threads::Threads
+  but the target was not found.
+```
+
+`modules/foundation/profiling/CMakeLists.txt` links `Threads::Threads` **PUBLIC**
+(`find_package(Threads REQUIRED)` + `target_link_libraries(... PUBLIC
+Threads::Threads)`), so the imported target leaks into the SDK's exported link
+interface. But `cmake/LudusConfig.cmake.in` only re-finds `volk` and
+`PkgConfig`/Wayland — it never `find_dependency(Threads)`. Any installed-SDK
+consumer that pulls `Ludus::FoundationProfiling` (directly or transitively via
+`Ludus::GraphicsRhi`) therefore fails at `find_package(Ludus)` unless it first
+resolves `Threads::Threads` itself. The engine's own `install-sdk` consumer
+self-test trips this too.
+
+**Exact engine change needed:** add a `Threads` dependency to the installed
+package config so consumers do not have to. In `cmake/LudusConfig.cmake.in`,
+alongside the existing `find_dependency(volk CONFIG)`:
+
+```cmake
+include(CMakeFindDependencyMacro)
+set(THREADS_PREFER_PTHREAD_FLAG ON)
+find_dependency(Threads)
+```
+
+**Sandbox workaround (in place):** `CMakeLists.txt` calls
+`find_package(Threads REQUIRED)` before `find_package(Ludus CONFIG REQUIRED)`,
+and `scripts/python/sandbox.py` installs the SDK via `scripts/build` +
+`cmake --install` (skipping the engine's own failing consumer self-test; the SDK
+install itself is complete and valid). Once the engine config adds
+`find_dependency(Threads)`, the workaround can be removed.
+
 ## Honesty note on performance
 
 No frame-timing numbers are reported because no GPU run happened here. The single

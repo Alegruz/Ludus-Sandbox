@@ -10,6 +10,15 @@ project(
 # Consume Ludus only through its installed SDK/CMake package. No engine sources
 # are vendored and no private/internal headers are included.
 # ---------------------------------------------------------------------------
+
+# Ludus::FoundationProfiling links Threads::Threads PUBLIC, but the installed
+# LudusConfig.cmake does not find_dependency(Threads). Until the engine SDK adds
+# that (see docs/VALIDATION.md "Known engine SDK packaging gap"), the consumer
+# must resolve the Threads imported target itself, BEFORE find_package(Ludus) so
+# the imported target exists when LudusTargets.cmake references it.
+set(THREADS_PREFER_PTHREAD_FLAG ON)
+find_package(Threads REQUIRED)
+
 find_package(Ludus CONFIG REQUIRED)
 
 set(CMAKE_CXX_STANDARD 23)
