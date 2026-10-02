@@ -57,6 +57,15 @@ def write_user_presets(
                 f"Expected Ludus-managed tool does not exist: {tool}"
             )
 
+    # The native SDK's LudusConfig.cmake does find_dependency(volk CONFIG), whose
+    # package config files live in the engine's Conan output dir. The consumer
+    # must therefore see BOTH the SDK install prefix and that Conan dir on
+    # CMAKE_PREFIX_PATH (matching the engine's own SDK consumer invocation).
+    conan_dir = ludus_source / "out" / "conan" / DEFAULT_PRESET
+    native_prefix_path = str(sdk_dir)
+    if conan_dir.is_dir():
+        native_prefix_path = f"{sdk_dir};{conan_dir}"
+
     configure_presets = [
         {
             "name": "linux-clang-development",
@@ -65,7 +74,7 @@ def write_user_presets(
             "cacheVariables": {
                 "CMAKE_MAKE_PROGRAM": str(ninja),
                 "CMAKE_CXX_COMPILER": str(clangxx),
-                "CMAKE_PREFIX_PATH": str(sdk_dir),
+                "CMAKE_PREFIX_PATH": native_prefix_path,
                 "LUDUS_SLANG_COMPILER": str(slang_compiler),
                 "LUDUS_SPIRV_VALIDATOR": str(spirv_validator),
             },
