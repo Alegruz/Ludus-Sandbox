@@ -224,23 +224,36 @@ def install_ludus_sdk(
 
 
 def install_ludus_web_sdk(ludus_source: Path) -> Path:
-    """Bootstrap the Emscripten/WebGPU toolchain and install the web SDK variant.
-    Returns the installed web SDK prefix. This drives the engine's own scripts so
-    the sandbox always uses the engine's supported web path."""
+    """Acquire the Emscripten/WebGPU toolchain, build the engine's web targets,
+    and install them to a prefix the sandbox can consume. The engine does not
+    expose a relocatable web SDK via ``install-sdk``; the supported path is
+    ``web init`` (acquire emsdk) -> ``web build`` -> ``cmake --install`` of the
+    web build tree (see fullscreen-rendering-handoff.md). Returns the prefix."""
     web_preset = "web-emscripten-development"
 
-    bootstrap = ludus_source / "scripts" / "bootstrap"
-    install_script = ludus_source / "scripts" / "install-sdk"
-    if not bootstrap.is_file():
-        raise RuntimeError(f"Missing Ludus bootstrap script: {bootstrap}")
-    if not install_script.is_file():
-        raise RuntimeError(f"Missing Ludus SDK install script: {install_script}")
+    init_script = ludus_source / "scripts" / "init"
+    build_script = ludus_source / "scripts" / "build"
+    if not init_script.is_file() or not build_script.is_file():
+        raise RuntimeError(f"Missing Ludus init/build scripts under {ludus_source / 'scripts'}")
 
-    # Acquire the pinned emsdk + web dependencies for the web preset.
-    run([str(bootstrap), web_preset], cwd=ludus_source)
-    run([str(install_script), web_preset], cwd=ludus_source)
+    # The engine routes web-emscripten-* presets to its browser pipeline. Acquire
+    # the pinned emsdk and configure (init --preset-only), then build the web
+    # targets in-tree. The preset is passed positionally.
+    run([str(init_script), web_preset, "--preset-only"], cwd=ludus_source)
+    run([str(build_script), web_preset], cwd=ludus_source)
 
+    # Install the built web tree to a prefix we can point CMAKE_PREFIX_PATH at.
+    cmake = ludus_source / "out" / "host-tools" / "venv" / "bin" / "cmake"
+    if not cmake.is_file():
+        raise RuntimeError(f"Expected Ludus-managed CMake does not exist: {cmake}")
+
+    build_dir = ludus_source / "out" / "build" / web_preset
     web_sdk_dir = ludus_source / "out" / "install" / web_preset
+    run(
+        [str(cmake), "--install", str(build_dir), "--prefix", str(web_sdk_dir)],
+        cwd=ludus_source,
+    )
+
     if not web_sdk_dir.is_dir():
         raise RuntimeError(
             "Ludus web SDK install completed, but expected install directory "
