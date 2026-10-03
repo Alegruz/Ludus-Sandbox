@@ -14,7 +14,7 @@ pass. The CPU is authoritative for ripple contact and boat collision.
 ## Baseline and dependency boundary
 
 Sandbox currently consumes an installed SDK with `find_package(Ludus CONFIG
-REQUIRED)`, pins engine revision `70f9debf16a7ec53e33e0f9b87a4106c33896c7a`
+REQUIRED)`, pins engine revision `b87895f291575f57c090cd72e7dd2d145eb6ad8c`
 in `config/ludus-version.txt`, and owns `src/ocean`, `shaders/ocean.slang`, and
 `web/shell.html`. See [BUILD.md](BUILD.md) and [VALIDATION.md](VALIDATION.md).
 The implementation record distinguishes local SDK overrides and software-GPU

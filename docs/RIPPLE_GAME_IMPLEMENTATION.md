@@ -72,8 +72,9 @@ survives canvas replacement during backend fallback and graphics restart.
 
 The laptop uses prepared local SDK overrides whose manifests record Ludus
 `652ea51a19d7`: native Development and browser Release SDKs. This is distinct
-from the repository bootstrap pin `70f9debf16a7ec53e33e0f9b87a4106c33896c7a`.
-Fresh bootstrap against that pin was not rerun. The package records the SDK's
+from the repository bootstrap pin `b87895f291575f57c090cd72e7dd2d145eb6ad8c`.
+Fresh bootstrap against that pin is exercised by PR CI. The pin was corrected
+from the unpublished pre-merge commit to the merged commit with identical files. The package records the SDK's
 actual revision separately from the checkout used to supply build tools.
 
 Verified with managed CMake/Ninja, Clang 18.1.3, Slang 2026.1.2, the pinned
