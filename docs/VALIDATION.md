@@ -76,3 +76,29 @@ software-GPU checks above supersede those limitations. Existing
 The original SDK Threads workaround remains in the sandbox's CMake consumer.
 The current engine SDK packaging and external consumer checks pass; removing
 that compatibility workaround is separate from the rendering fix.
+
+## Editor release integration
+
+The game-owned release profile uses the shared Ludus packager and an explicit
+`GameRelease` CMake install component. The exact archive SHA256
+`4d130b1dead7de561df8b25fd1992c4d742980efeccaaf909172021928eafc76`
+was built against browser Release SDK revision
+`70f9debf16a7ec53e33e0f9b87a4106c33896c7a`, statically verified, extracted,
+and passed all 13 existing Chromium cases. WebGPU/WebGL 2 pixels, controls,
+pause/restart, fallback, responsive/DPR/iframe, context loss and asset failures
+were exercised. Desktop and narrow screenshots were visually reviewed. This
+is software-GPU evidence with a test-only 100 ms RAF delay, not hardware
+performance or hosted itch.io acceptance. See
+[editor-release-validation.json](editor-release-validation.json).
+
+The real Qt Editor controller opened this project and packaged its `web-release`
+profile through the asynchronous adapter, reporting `Ok`, confirmed cleanup,
+and zero dropped output. Four release bootstrap tests and 81 GPU-free checks
+passed; ASan/UBSan with leak checks passed. The final browser app built with
+warnings as errors, and touched C++ files passed pinned clang-format 18.
+
+The tag/manual release workflow runs those browser tests against the shared
+packager's archive before transferring it to the separate upload job.
+Configure `ITCH_IO_TARGET` and environment `itch-release`/`BUTLER_API_KEY`
+as described in [RELEASING.md](../RELEASING.md) before the first live release.
+No live upload was performed during this implementation.

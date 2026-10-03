@@ -29,7 +29,9 @@ def run(
     env: dict[str, str] | None = None,
 ) -> None:
     print("+", " ".join(str(arg) for arg in args))
-    subprocess.run(args, cwd=cwd, env=env, check=True)
+    child_env = dict(os.environ if env is None else env)
+    child_env.pop("BUTLER_API_KEY", None)
+    subprocess.run(args, cwd=cwd, env=child_env, check=True)
 
 
 def require_command(name: str) -> None:
@@ -408,6 +410,8 @@ def configure_sandbox_web(
 
 
 def init_command(args: argparse.Namespace) -> None:
+    if args.web_release:
+        args.with_web = True
     repo_root = Path(__file__).resolve().parents[2]
 
     print("Initializing Ludus Sandbox")
@@ -556,6 +560,7 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
 
+    init_parser.add_argument("--web-release", action="store_true", help="Prepare browser Release inputs (implies --with-web).")
     init_parser.set_defaults(func=init_command)
 
     return parser

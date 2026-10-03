@@ -106,3 +106,5 @@ if(LUDUS_SANDBOX_BUILD_TESTS AND NOT EMSCRIPTEN)
     enable_testing()
     add_test(NAME ludus_sandbox_ocean_tests COMMAND ludus_sandbox_ocean_tests)
 endif()
+
+include(cmake/GameRelease.cmake)

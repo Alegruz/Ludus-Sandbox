@@ -7,7 +7,7 @@ ocean playground, plus the required engine revision and SDK variant.
 
 | Item | Value | Where |
 | --- | --- | --- |
-| Ludus revision | `10aab8df3cd5d5cdea64f66f9b0ef9732d5cef79` ([engine PR #56](https://github.com/Alegruz/Ludus/pull/56), WebGL 2 fallback) | `config/ludus-version.txt` |
+| Ludus revision | `70f9debf16a7ec53e33e0f9b87a4106c33896c7a` ([engine PR #58](https://github.com/Alegruz/Ludus/pull/58), Editor game releases; includes WebGL 2 fallback) | `config/ludus-version.txt` |
 | SDK variant | `linux-clang-development` (native) / `web-emscripten-release` (browser SDK; development and release app presets) | `scripts/python/sandbox.py` (`SDK_VARIANT`) |
 | Slang compiler | `2026.1.2` | engine `config/shader_toolchain.json` |
 | SPIRV-Cross | `vulkan-sdk-1.4.313.0` (source archive + built binary digest verified) | engine `config/spirv_cross_toolchain.json` |
@@ -184,3 +184,10 @@ rebuilding regenerates `ocean.vertex.spv`, `ocean.fragment.spv`, `ocean.wgsl`,
 For manual browser configuration, also set `LUDUS_SPIRV_CROSS` to the pinned
 verified binary produced by `scripts/bootstrap-spirv-cross`. Normal configure,
 build and gameplay remain offline after explicit initialization.
+
+## Editor releases and automatic itch.io uploads
+
+Open `ludus.project.json` in the Editor and use **Release > Package Release**.
+See [RELEASING.md](../RELEASING.md) for preparation, package verification, and
+GitHub environment/variable setup. The release workflow tests the exact archive
+in Chromium before the separate upload job receives credentials.

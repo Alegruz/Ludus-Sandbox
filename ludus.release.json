@@ -1,0 +1,28 @@
+{
+  "automation": {
+    "buildCommand": [
+      "./scripts/release-prepare"
+    ],
+    "provider": "github-actions",
+    "releaseTags": true
+  },
+  "itch": {
+    "channels": {
+      "web": {
+        "channel": "html5",
+        "packageProfile": "web-release"
+      }
+    }
+  },
+  "profiles": {
+    "web-release": {
+      "buildProfile": "release",
+      "configurePreset": "web-emscripten-release",
+      "entryPoint": "index.html",
+      "installComponent": "GameRelease",
+      "target": "LudusSandbox",
+      "targetPlatform": "web"
+    }
+  },
+  "schemaVersion": 1
+}

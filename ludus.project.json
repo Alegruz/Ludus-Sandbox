@@ -1,0 +1,27 @@
+{
+  "version": 2,
+  "name": "Ludus Sandbox",
+  "provider": "cmake",
+  "source_dir": ".",
+  "preset": "linux-clang-development",
+  "target": "LudusSandbox",
+  "run": {
+    "cwd": ".",
+    "args": []
+  },
+  "engine": {
+    "version": "0.1.0",
+    "components": [
+      "FoundationBase",
+      "FoundationLogging",
+      "FoundationProfiling",
+      "Platform",
+      "GraphicsRhi"
+    ],
+    "features": []
+  },
+  "template": {
+    "id": "existing-project",
+    "version": 1
+  }
+}

@@ -12,7 +12,7 @@ const zip = resolve(process.argv[3] || '../../out/packages/drift-ocean-web-relea
 const output = resolve(process.argv[4] || '../../out/browser-qa/results');
 await mkdir(output, {recursive:true});
 const info = JSON.parse(await readFile(resolve(root, 'build-info.json')));
-for (const [name, hash] of Object.entries(info.sha256)) {
+for (const [name, hash] of Object.entries(info.sha256 ?? Object.fromEntries(info.files.map(file => [file.path, file.sha256])))) {
   assert.equal(createHash('sha256').update(await readFile(resolve(root,name))).digest('hex'),hash,name);
 }
 const report = {kind:'Software GPU only; hardware and hosted acceptance unverified',
