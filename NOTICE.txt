@@ -1,0 +1,3 @@
+Ludus Sandbox uses Ludus. See licenses/Ludus/ for SDK and dependency notices.
+Sandbox source and authored ocean shaders retain their repository license terms.
+No third-party game assets are included in this browser package.

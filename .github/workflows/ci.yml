@@ -39,6 +39,9 @@ jobs:
           echo "Checking: $files"
           clang-format-18 --dry-run --Werror $files
 
+      - name: Test release bootstrap contracts
+        run: python3 -m unittest discover -s scripts/python -p 'test_*.py' -v
+
       - name: Build and run the GPU-free logic tests
         run: |
           clang++-18 -std=c++23 -Wall -Wextra -Wpedantic -Werror -fno-exceptions -I src \

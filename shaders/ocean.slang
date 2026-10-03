@@ -2,7 +2,7 @@
 //
 // One fullscreen pass. No textures, no water physics, no horizon, no perspective.
 // Everything is authored from the single uniform block below. Only f32
-// scalar/vector arithmetic, uniform fields, SV_VertexID, SV_Position and a
+// scalar/vector arithmetic, uniform fields, SV_VulkanVertexID, SV_Position and a
 // location-0 RGBA output are used (the engine's validated shader subset; see
 // fullscreen-rendering-handoff.md).
 //
@@ -37,7 +37,7 @@ struct OceanUniforms
 [[vk::binding(0, 0)]] ConstantBuffer<OceanUniforms> ocean;
 
 [shader("vertex")]
-float4 vertexMain(uint id : SV_VertexID) : SV_Position
+float4 vertexMain(uint id : SV_VulkanVertexID) : SV_Position
 {
     // Fullscreen triangle from the vertex id (no vertex buffer).
     float2 p = float2((id << 1) & 2, id & 2);

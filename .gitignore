@@ -2,3 +2,4 @@
 /CMakeUserPresets.json
 __pycache__/
 *.pyc
+/.ludus/

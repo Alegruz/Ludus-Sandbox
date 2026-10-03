@@ -7,14 +7,14 @@ ocean playground, plus the required engine revision and SDK variant.
 
 | Item | Value | Where |
 | --- | --- | --- |
-| Ludus revision | `71e56a638044764344eedf9ac7bf9601195a2cfa` (PR #51, "Add public fullscreen rendering API and SDK shader tooling") | `config/ludus-version.txt` |
+| Ludus revision | `70f9debf16a7ec53e33e0f9b87a4106c33896c7a` (Editor-managed releases and browser packaging) | `config/ludus-version.txt` |
 | SDK variant | `linux-clang-development` (native) / `web-emscripten-development` (browser) | `scripts/python/sandbox.py` (`SDK_VARIANT`) |
 | Slang compiler | `2026.1.2` | engine `config/shader_toolchain.json` |
 | SPIR-V validator | `spirv-val` `2025.1~rc1` (digest-pinned) | engine `config/shader_toolchain.json` |
 
-The public fullscreen rendering API (`ludus/graphics/rhi/rhi.h` +
-`render.h`) and the `ludus_compile_shader` CMake helper only exist from the
-revision above. The pin is a commit SHA, so the build is reproducible: `init.sh`
+The pinned revision includes the public fullscreen rendering API
+(`ludus/graphics/rhi/rhi.h` + `render.h`), `ludus_compile_shader`, current browser
+shader tooling and the Editor/CLI release workflow. The pin is a commit SHA, so the build is reproducible: `init.sh`
 checks out exactly that revision.
 
 ## Host requirements
@@ -168,3 +168,12 @@ includes/defines/compiler/validator) change — this is handled by
 `ludus_compile_shader` via the generated depfiles. Changing the shader and
 rebuilding regenerates `ocean.vertex.spv`, `ocean.fragment.spv`, `ocean.wgsl`,
 and the `ocean.h` factory header the app includes.
+
+## Editor and automated itch.io releases
+
+The repository now has an Editor project descriptor and a browser Release profile.
+See [RELEASING.md](../RELEASING.md) for preparation, packaging, GitHub environment
+setup and automatic tag/manual uploads. `--web-release` opts into a distinct Release
+SDK/preset; the ordinary development bootstrap retains its prior profile.
+The newer pinned engine also requires pinned SPIRV-Cross for browser Auto shader
+artifacts, acquired by the bootstrap and passed explicitly into CMake.

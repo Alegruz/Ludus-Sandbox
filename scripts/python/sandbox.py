@@ -16,8 +16,8 @@ DEFAULT_PRESET = "linux-clang-development"
 
 # The SDK variant Ludus-Sandbox consumes. The public fullscreen rendering API
 # and the ludus_compile_shader helper (Prompts 1 & 2 handoff) require the engine
-# revision pinned in config/ludus-version.txt (PR #51, "Add public fullscreen
-# rendering API and SDK shader tooling") installed with this preset. See
+# revision pinned in config/ludus-version.txt, including current release and
+# browser shader tooling, installed with this preset. See
 # docs/BUILD.md for the full, reproducible recipe.
 SDK_VARIANT = DEFAULT_PRESET
 
@@ -29,7 +29,8 @@ def run(
     env: dict[str, str] | None = None,
 ) -> None:
     print("+", " ".join(str(arg) for arg in args))
-    subprocess.run(args, cwd=cwd, env=env, check=True)
+    clean_env = {k: v for k, v in (env if env is not None else os.environ).items() if k != "BUTLER_API_KEY"}
+    subprocess.run(args, cwd=cwd, env=clean_env, check=True)
 
 
 def require_command(name: str) -> None:
@@ -43,6 +44,7 @@ def write_user_presets(
     slang_compiler: Path,
     spirv_validator: Path,
     web_sdk_dir: Path | None,
+    web_preset: str = "web-emscripten-development",
 ) -> None:
     tool_venv = ludus_source / "out" / "host-tools" / "venv" / "bin"
     tool_bin = ludus_source / "out" / "host-tools" / "bin"
@@ -56,6 +58,8 @@ def write_user_presets(
             raise RuntimeError(
                 f"Expected Ludus-managed tool does not exist: {tool}"
             )
+
+    spirv_cross = ludus_source / "out/shader-tools/spirv-cross/bin/spirv-cross"
 
     # The native SDK's LudusConfig.cmake does find_dependency(volk CONFIG), whose
     # package config files live in the engine's Conan output dir. The consumer
@@ -77,6 +81,7 @@ def write_user_presets(
                 "CMAKE_PREFIX_PATH": native_prefix_path,
                 "LUDUS_SLANG_COMPILER": str(slang_compiler),
                 "LUDUS_SPIRV_VALIDATOR": str(spirv_validator),
+                "LUDUS_SPIRV_CROSS": str(spirv_cross),
             },
         }
     ]
@@ -104,9 +109,9 @@ def write_user_presets(
     if web_sdk_dir is not None and emscripten_toolchain.is_file():
         configure_presets.append(
             {
-                "name": "web-emscripten-development",
+                "name": web_preset,
                 "displayName": "Web Emscripten Development",
-                "inherits": "web-emscripten-development-base",
+                "inherits": web_preset + "-base",
                 "toolchainFile": str(emscripten_toolchain),
                 "cacheVariables": {
                     "CMAKE_MAKE_PROGRAM": str(ninja),
@@ -114,13 +119,14 @@ def write_user_presets(
                     "CMAKE_FIND_ROOT_PATH": str(web_sdk_dir),
                     "LUDUS_SLANG_COMPILER": str(slang_compiler),
                     "LUDUS_SPIRV_VALIDATOR": str(spirv_validator),
+                "LUDUS_SPIRV_CROSS": str(spirv_cross),
                 },
             }
         )
         build_presets.append(
             {
-                "name": "web-emscripten-development",
-                "configurePreset": "web-emscripten-development",
+                "name": web_preset,
+                "configurePreset": web_preset,
             }
         )
 
@@ -250,14 +256,12 @@ def install_ludus_sdk(
     return sdk_dir
 
 
-def install_ludus_web_sdk(ludus_source: Path) -> Path:
+def install_ludus_web_sdk(ludus_source: Path, web_preset: str = "web-emscripten-development") -> Path:
     """Acquire the Emscripten/WebGPU toolchain, build the engine's web targets,
     and install them to a prefix the sandbox can consume. The engine does not
     expose a relocatable web SDK via ``install-sdk``; the supported path is
     ``web init`` (acquire emsdk) -> ``web build`` -> ``cmake --install`` of the
     web build tree (see fullscreen-rendering-handoff.md). Returns the prefix."""
-    web_preset = "web-emscripten-development"
-
     init_script = ludus_source / "scripts" / "init"
     build_script = ludus_source / "scripts" / "build"
     if not init_script.is_file() or not build_script.is_file():
@@ -315,6 +319,10 @@ def acquire_shader_tools(ludus_source: Path) -> tuple[Path, Path]:
             f"{tools / 'spirv-tools'}"
         )
 
+    cross_bootstrap = ludus_source / "scripts/bootstrap-spirv-cross"
+    if not cross_bootstrap.is_file():
+        raise RuntimeError("The pinned engine must provide scripts/bootstrap-spirv-cross")
+    run([str(cross_bootstrap)], cwd=ludus_source)
     return slang, validators[0]
 
 
@@ -349,6 +357,7 @@ def configure_sandbox(
             # paths or a local SDK work without editing CMake.
             f"-DLUDUS_SLANG_COMPILER={slang_compiler}",
             f"-DLUDUS_SPIRV_VALIDATOR={spirv_validator}",
+            f"-DLUDUS_SPIRV_CROSS={ludus_source / 'out/shader-tools/spirv-cross/bin/spirv-cross'}",
         ],
         cwd=repo_root,
     )
@@ -359,6 +368,7 @@ def configure_sandbox_web(
     ludus_source: Path,
     slang_compiler: Path,
     spirv_validator: Path,
+    web_preset: str = "web-emscripten-development",
 ) -> None:
     """Configure the browser (Emscripten/WebGPU) preset so that
     ``cmake --build --preset web-emscripten-development`` has a build tree.
@@ -366,8 +376,6 @@ def configure_sandbox_web(
     Emscripten cross-compilation must run under the emsdk's ``emcmake`` wrapper
     so emcc/the toolchain are discovered; the generated user preset supplies the
     toolchain file, prefix and shader tools."""
-    web_preset = "web-emscripten-development"
-
     cmake = ludus_source / "out" / "host-tools" / "venv" / "bin" / "cmake"
     emcmake = (
         ludus_source
@@ -391,6 +399,7 @@ def configure_sandbox_web(
             web_preset,
             f"-DLUDUS_SLANG_COMPILER={slang_compiler}",
             f"-DLUDUS_SPIRV_VALIDATOR={spirv_validator}",
+            f"-DLUDUS_SPIRV_CROSS={ludus_source / 'out/shader-tools/spirv-cross/bin/spirv-cross'}",
         ],
         cwd=repo_root,
     )
@@ -398,6 +407,7 @@ def configure_sandbox_web(
 
 def init_command(args: argparse.Namespace) -> None:
     repo_root = Path(__file__).resolve().parents[2]
+    web_preset = "web-emscripten-release" if args.web_release else "web-emscripten-development"
 
     print("Initializing Ludus Sandbox")
     print(f"Repository: {repo_root}")
@@ -436,10 +446,10 @@ def init_command(args: argparse.Namespace) -> None:
         if not candidate.is_dir():
             raise RuntimeError(f"Provided --web-sdk-dir does not exist: {candidate}")
         web_sdk_dir = candidate
-    elif args.with_web and not args.sdk_dir:
-        web_sdk_dir = install_ludus_web_sdk(ludus_source)
+    elif (args.with_web or args.web_release) and not args.sdk_dir:
+        web_sdk_dir = install_ludus_web_sdk(ludus_source, web_preset)
     else:
-        candidate = ludus_source / "out" / "install" / "web-emscripten-development"
+        candidate = ludus_source / "out" / "install" / web_preset
         if candidate.is_dir():
             web_sdk_dir = candidate
 
@@ -450,6 +460,7 @@ def init_command(args: argparse.Namespace) -> None:
         slang_compiler=slang_compiler,
         spirv_validator=spirv_validator,
         web_sdk_dir=web_sdk_dir,
+        web_preset=web_preset,
     )
 
     configure_sandbox(
@@ -473,6 +484,7 @@ def init_command(args: argparse.Namespace) -> None:
             ludus_source=ludus_source,
             slang_compiler=slang_compiler,
             spirv_validator=spirv_validator,
+            web_preset=web_preset,
         )
         web_configured = True
 
@@ -491,7 +503,7 @@ def init_command(args: argparse.Namespace) -> None:
     print("Build with:")
     print(f"  cmake --build --preset {args.preset}")
     if web_configured:
-        print("  cmake --build --preset web-emscripten-development")
+        print(f"  cmake --build --preset {web_preset}")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -544,6 +556,7 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
 
+    init_parser.add_argument("--web-release", action="store_true", help="Build and configure the browser Release SDK/profile for packaging.")
     init_parser.set_defaults(func=init_command)
 
     return parser
