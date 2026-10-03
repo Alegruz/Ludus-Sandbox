@@ -41,8 +41,9 @@ checks out exactly that revision.
 
 `init.sh` runs `scripts/python/sandbox.py init`, which:
 
-1. Clones Ludus and checks out the pinned revision (or uses `--ludus-source
-   <path>` for a local checkout).
+1. Clones Ludus, explicitly fetches the pinned revision, and checks out the
+   fetched commit (or uses `--ludus-source <path>` for a local checkout). This
+   also resolves PR commits after a squash merge and branch deletion.
 2. Runs the engine's `init.sh` and `scripts/shader-probe bootstrap` to acquire
    the pinned, isolated Slang + SPIRV-Tools, then `scripts/bootstrap-spirv-cross`
    acquires/builds the pinned translator. These are explicit network bootstrap
