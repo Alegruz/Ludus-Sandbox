@@ -24,6 +24,16 @@ struct Point final
     float64 X = 0.0;
     float64 Y = 0.0;
 };
+// Physical tuning is independent of cosmetic ocean animation. Changes take
+// effect on the next tick; validation is transactional. Velocities are m/s.
+struct PhysicsSettings final
+{
+    Point WaterVelocity;
+    float64 DragRate = 0.7;     // Per second.
+    float64 PushSpeed = 2.5;    // Delta velocity at the ripple center.
+    float64 MaxBoatSpeed = 7.0; // World-relative gameplay limit.
+};
+
 struct Camera final
 {
     float64 Width = 70.0;
@@ -64,6 +74,13 @@ enum class PlacementResult : uint8
 class RippleGame final
 {
 public:
+    RippleGame() noexcept;
+    [[nodiscard]] bool SetPhysics(const PhysicsSettings& settings) noexcept;
+    [[nodiscard]] const PhysicsSettings& GetPhysics() const noexcept
+    {
+        return mPhysics;
+    }
+
     [[nodiscard]] PlacementResult Place(Point world) noexcept;
     void Advance(float64 delta, bool running) noexcept;
     void CancelInput() noexcept;
@@ -109,6 +126,9 @@ public:
     }
 
 private:
+    PhysicsSettings mPhysics;
+    float64 mVelocityScale = 1.0;
+    float64 mDistanceScale = kTickSeconds;
     Boat mBoat;
     Ripple mRipples[kRippleCapacity];
     Point mInput[kInputCapacity];

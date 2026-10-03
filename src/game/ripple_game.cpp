@@ -1,5 +1,9 @@
 #include "game/ripple_game.h"
 
+#if defined(LUDUS_SANDBOX_WITH_SDK)
+#    include <ludus/foundation/math/dynamics.hpp>
+#endif
+
 #include <cmath>
 #include <initializer_list>
 #include <limits>
@@ -10,9 +14,6 @@ namespace
 {
 constexpr float64 kEpsilon = 1e-9;
 constexpr float64 kContactBand = kBoatRadius + kRingHalfWidth;
-constexpr float64 kDrag = 0.7;
-constexpr float64 kPush = 2.5;
-constexpr float64 kMaxSpeed = 7.0;
 
 [[nodiscard]] float64 Length(Point p) noexcept
 {
@@ -44,6 +45,25 @@ Point ScreenToWorld(Point normalized, Camera camera) noexcept
 
 bool RingContact(Point start, Point end, Point origin, float64 ringStart, float64 ringEnd, float64& time) noexcept
 {
+#if defined(LUDUS_SANDBOX_WITH_SDK)
+    using namespace ludus::foundation::math;
+    RadialSweepContact contact;
+    const auto status = TrySweepRadialBand({start.X, start.Y, 0.0},
+                                           {end.X, end.Y, 0.0},
+                                           {origin.X, origin.Y, 0.0},
+                                           ringStart,
+                                           ringEnd,
+                                           kContactBand,
+                                           contact);
+    if (!IsSuccess(status) || !contact.Hit)
+    {
+        return false;
+    }
+    time = contact.Fraction;
+    return true;
+#else
+    // Independent bounded-world reference for SDK-free fast checks. Production
+    // and native SDK tests always use FoundationMath above.
     const Point relative{start.X - origin.X, start.Y - origin.Y};
     const Point travel{end.X - start.X, end.Y - start.Y};
     const float64 growth = ringEnd - ringStart;
@@ -92,6 +112,46 @@ bool RingContact(Point start, Point end, Point origin, float64 ringStart, float6
     }
     time = first;
     return true;
+#endif
+}
+
+RippleGame::RippleGame() noexcept
+{
+    (void)SetPhysics({});
+}
+
+bool RippleGame::SetPhysics(const PhysicsSettings& settings) noexcept
+{
+    if (!std::isfinite(settings.DragRate) || settings.DragRate < 0.0 || settings.DragRate > 100.0 ||
+        !std::isfinite(settings.PushSpeed) || settings.PushSpeed < 0.0 || settings.PushSpeed > 100.0 ||
+        !std::isfinite(settings.MaxBoatSpeed) || settings.MaxBoatSpeed <= 0.0 || settings.MaxBoatSpeed > 100.0 ||
+        !std::isfinite(settings.WaterVelocity.X) || !std::isfinite(settings.WaterVelocity.Y) ||
+        Length(settings.WaterVelocity) > settings.MaxBoatSpeed)
+    {
+        return false;
+    }
+    float64 velocityScale = 1.0;
+    float64 distanceScale = kTickSeconds;
+#if defined(LUDUS_SANDBOX_WITH_SDK)
+    using namespace ludus::foundation::math;
+    LinearDragStep step;
+    if (!IsSuccess(TryComputeLinearDragStep(settings.DragRate, kTickSeconds, step)))
+    {
+        return false;
+    }
+    velocityScale = step.VelocityScale;
+    distanceScale = step.DistanceScale;
+#else
+    if (settings.DragRate > 0.0)
+    {
+        velocityScale = std::exp(-settings.DragRate * kTickSeconds);
+        distanceScale = -std::expm1(-settings.DragRate * kTickSeconds) / settings.DragRate;
+    }
+#endif
+    mPhysics = settings;
+    mVelocityScale = velocityScale;
+    mDistanceScale = distanceScale;
+    return true;
 }
 
 PlacementResult RippleGame::Place(Point world) noexcept
@@ -125,7 +185,9 @@ void RippleGame::CancelInput() noexcept
 
 void RippleGame::Reset() noexcept
 {
+    const auto settings = mPhysics;
     *this = RippleGame{};
+    (void)SetPhysics(settings);
 }
 
 uint32 RippleGame::ActiveRipples() const noexcept
@@ -211,12 +273,12 @@ void RippleGame::Tick() noexcept
     mInputCount = 0;
 
     mBoat.PreviousPosition = mBoat.Position;
-    const float64 decay = std::exp(-kDrag * kTickSeconds);
-    const float64 distanceScale = (1.0 - decay) / kDrag;
-    const Point end{mBoat.Position.X + mBoat.Velocity.X * distanceScale,
-                    mBoat.Position.Y + mBoat.Velocity.Y * distanceScale};
-    mBoat.Velocity.X *= decay;
-    mBoat.Velocity.Y *= decay;
+    const Point current = mPhysics.WaterVelocity;
+    const Point relativeVelocity{mBoat.Velocity.X - current.X, mBoat.Velocity.Y - current.Y};
+    const Point end{mBoat.Position.X + current.X * kTickSeconds + relativeVelocity.X * mDistanceScale,
+                    mBoat.Position.Y + current.Y * kTickSeconds + relativeVelocity.Y * mDistanceScale};
+    mBoat.Velocity.X = current.X + relativeVelocity.X * mVelocityScale;
+    mBoat.Velocity.Y = current.Y + relativeVelocity.Y * mVelocityScale;
     mBoat.ContactFlash = mBoat.ContactFlash > kTickSeconds ? mBoat.ContactFlash - kTickSeconds : 0.0;
 
     struct Contact final
@@ -274,7 +336,7 @@ void RippleGame::Tick() noexcept
         if (length > kEpsilon)
         {
             const float64 radius = (ripple.PreviousAge + hit.Time * kTickSeconds) * kRippleSpeed;
-            const float64 strength = kPush * (1.0 - radius / (kRippleLifetime * kRippleSpeed));
+            const float64 strength = mPhysics.PushSpeed * (1.0 - radius / (kRippleLifetime * kRippleSpeed));
             mBoat.Velocity.X += direction.X / length * strength;
             mBoat.Velocity.Y += direction.Y / length * strength;
             mBoat.ContactFlash = 0.18;
@@ -282,10 +344,10 @@ void RippleGame::Tick() noexcept
     }
     mBoat.Position = end;
     const float64 speed = Length(mBoat.Velocity);
-    if (speed > kMaxSpeed)
+    if (speed > mPhysics.MaxBoatSpeed)
     {
-        mBoat.Velocity.X *= kMaxSpeed / speed;
-        mBoat.Velocity.Y *= kMaxSpeed / speed;
+        mBoat.Velocity.X *= mPhysics.MaxBoatSpeed / speed;
+        mBoat.Velocity.Y *= mPhysics.MaxBoatSpeed / speed;
     }
     if (speed > 0.05)
     {

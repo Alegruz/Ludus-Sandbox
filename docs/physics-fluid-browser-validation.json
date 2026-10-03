@@ -1,0 +1,85 @@
+{
+  "kind": "Real software GPU, emulated touch; physical devices unverified",
+  "cases": [
+    {
+      "name": "webgpu-mouse",
+      "status": "passed",
+      "push": {
+        "x": "0.29013850356637005",
+        "y": "0",
+        "placements": "1",
+        "contacts": "1",
+        "ticks": "25",
+        "rings": "1",
+        "result": "0",
+        "cooldown": "0",
+        "paused": "true",
+        "enabled": "true"
+      },
+      "errors": []
+    },
+    {
+      "name": "webgpu-touch",
+      "status": "passed",
+      "push": {
+        "x": "0.29013849526531116",
+        "y": "0",
+        "placements": "1",
+        "contacts": "1",
+        "ticks": "25",
+        "rings": "1",
+        "result": "0",
+        "cooldown": "0",
+        "paused": "true",
+        "enabled": "true"
+      },
+      "errors": []
+    },
+    {
+      "name": "webgl2-mouse",
+      "status": "passed",
+      "push": {
+        "x": "0.22012250304432332",
+        "y": "0",
+        "placements": "1",
+        "contacts": "1",
+        "ticks": "20",
+        "rings": "1",
+        "result": "2",
+        "cooldown": "0.13333333333333333",
+        "paused": "true",
+        "enabled": "true"
+      },
+      "errors": []
+    },
+    {
+      "name": "webgl2-touch",
+      "status": "passed",
+      "push": {
+        "x": "0.3921464261170198",
+        "y": "0",
+        "placements": "1",
+        "contacts": "1",
+        "ticks": "28",
+        "rings": "1",
+        "result": "0",
+        "cooldown": "0",
+        "paused": "true",
+        "enabled": "true"
+      },
+      "errors": []
+    }
+  ],
+  "args": [
+    "--enable-unsafe-webgpu",
+    "--enable-features=Vulkan",
+    "--use-webgpu-adapter=swiftshader",
+    "--use-angle=swiftshader",
+    "--use-vulkan=swiftshader",
+    "--disable-vulkan-surface",
+    "--enable-unsafe-swiftshader"
+  ],
+  "browserVersion": "140.0.7339.186",
+  "engineRevision": "9554d051b2125580327d9f89c06395798a53028d",
+  "validationDate": "2026-10-03"
+}

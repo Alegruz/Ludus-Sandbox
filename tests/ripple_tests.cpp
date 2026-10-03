@@ -142,6 +142,75 @@ void TestPresentationRates() noexcept
     CHECK(sixty.Contacts() == thirty.Contacts());
 }
 
+void TestPhysicalCurrentAndTuning() noexcept
+{
+    RippleGame game;
+    PhysicsSettings settings;
+    settings.WaterVelocity = {2.0, -1.0};
+    CHECK(game.SetPhysics(settings));
+    for (int i = 0; i < 60; ++i)
+    {
+        game.Tick();
+    }
+    const float64 blend = 1.0 - std::exp(-settings.DragRate);
+    CHECK(Near(game.GetBoat().Velocity.X, 2.0 * blend));
+    CHECK(Near(game.GetBoat().Velocity.Y, -blend));
+    CHECK(Near(game.GetBoat().Position.X, 2.0 * (1.0 - blend / settings.DragRate)));
+    CHECK(Near(game.GetBoat().Position.Y, -(1.0 - blend / settings.DragRate)));
+    const auto before = game.GetBoat().Position;
+    settings.DragRate = -1.0;
+    CHECK(!game.SetPhysics(settings));
+    CHECK(Near(game.GetPhysics().DragRate, 0.7));
+    CHECK(Near(game.GetBoat().Position.X, before.X));
+    settings.DragRate = std::numeric_limits<float64>::quiet_NaN();
+    CHECK(!game.SetPhysics(settings));
+    settings.DragRate = 0.0;
+    settings.WaterVelocity.X = std::numeric_limits<float64>::infinity();
+    CHECK(!game.SetPhysics(settings));
+    settings.WaterVelocity = {8.0, 0.0};
+    CHECK(!game.SetPhysics(settings));
+    settings.WaterVelocity = {2.0, -1.0};
+    settings.MaxBoatSpeed = 0.0;
+    CHECK(!game.SetPhysics(settings));
+    settings.MaxBoatSpeed = 7.0;
+    settings.PushSpeed = -1.0;
+    CHECK(!game.SetPhysics(settings));
+    settings.PushSpeed = std::numeric_limits<float64>::infinity();
+    CHECK(!game.SetPhysics(settings));
+    settings.PushSpeed = 2.5;
+    CHECK(game.SetPhysics(settings));
+    const auto velocity = game.GetBoat().Velocity;
+    game.Tick();
+    CHECK(Near(game.GetBoat().Velocity.X, velocity.X));
+    CHECK(Near(game.GetBoat().Position.X, before.X + velocity.X * kTickSeconds));
+    game.Reset();
+    CHECK(Near(game.GetPhysics().WaterVelocity.X, 2.0));
+    CHECK(Near(game.GetPhysics().DragRate, 0.0));
+    CHECK(Near(game.GetBoat().Position.X, 0.0));
+    game.Tick();
+    CHECK(Near(game.GetBoat().Velocity.X, 0.0)); // Zero drag means no water coupling.
+
+    settings.DragRate = 1e-20;
+    CHECK(game.SetPhysics(settings));
+    (void)game.Place({-5, 0});
+    for (int i = 0; i < 60; ++i)
+    {
+        game.Tick();
+    }
+    CHECK(game.GetBoat().Position.X > 0.5); // Small drag must not erase motion.
+    settings.PushSpeed = 0.0;
+    settings.DragRate = 0.7;
+    CHECK(game.SetPhysics(settings));
+    game.Reset();
+    (void)game.Place({-5, 0});
+    for (int i = 0; i < 60; ++i)
+    {
+        game.Tick();
+    }
+    CHECK(game.Contacts() == 1);
+    CHECK(Near(game.GetBoat().Velocity.X, 2.0 * blend));
+}
+
 void TestCameraAndSnapshot() noexcept
 {
     const auto wide = FitCamera(1920, 1080);
@@ -175,6 +244,7 @@ int main()
     TestInputAndClock();
     TestPresentationRates();
     TestCameraAndSnapshot();
+    TestPhysicalCurrentAndTuning();
     std::printf("Ripple game: %d checks, %d failures\n", gChecks, gFailures);
     return gFailures == 0 ? 0 : 1;
 }

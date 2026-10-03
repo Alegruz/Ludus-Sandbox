@@ -40,7 +40,8 @@ target_compile_features(ludus_sandbox_ocean PUBLIC cxx_std_23)
 # When linked against the SDK, use the engine numeric aliases from the real
 # <ludus/foundation/base/types.h>.
 target_compile_definitions(ludus_sandbox_ocean PUBLIC LUDUS_SANDBOX_WITH_SDK)
-target_link_libraries(ludus_sandbox_ocean PUBLIC Ludus::FoundationBase)
+target_link_libraries(ludus_sandbox_ocean PUBLIC Ludus::FoundationBase Ludus::FoundationMath)
+target_compile_options(ludus_sandbox_ocean PRIVATE -ffp-contract=off)
 target_compile_options(ludus_sandbox_ocean PRIVATE -Wall -Wextra -Wpedantic -Werror -fno-exceptions)
 
 # ---------------------------------------------------------------------------
@@ -111,9 +112,14 @@ if(LUDUS_SANDBOX_BUILD_TESTS AND NOT EMSCRIPTEN)
     target_include_directories(ludus_sandbox_ripple_tests PRIVATE src)
     target_compile_features(ludus_sandbox_ripple_tests PRIVATE cxx_std_23)
     target_compile_options(ludus_sandbox_ripple_tests PRIVATE -Wall -Wextra -Wpedantic -Werror -fno-exceptions)
+    # Verify the real production SDK path in addition to the SDK-free oracle.
+    add_executable(ludus_sandbox_ripple_sdk_tests tests/ripple_tests.cpp)
+    target_link_libraries(ludus_sandbox_ripple_sdk_tests PRIVATE ludus_sandbox_ocean)
+    target_compile_options(ludus_sandbox_ripple_sdk_tests PRIVATE -Wall -Wextra -Wpedantic -Werror -fno-exceptions)
     enable_testing()
     add_test(NAME ludus_sandbox_ocean_tests COMMAND ludus_sandbox_ocean_tests)
     add_test(NAME ludus_sandbox_ripple_tests COMMAND ludus_sandbox_ripple_tests)
+    add_test(NAME ludus_sandbox_ripple_sdk_tests COMMAND ludus_sandbox_ripple_sdk_tests)
 endif()
 
 include(cmake/GameRelease.cmake)
