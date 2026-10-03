@@ -1,5 +1,8 @@
 # Drift first playable slice
 
+The [physics and fluid implementation](PHYSICS_FLUID_SIMULATION.md) adds checked
+SDK kernels and validated current/drag tuning to this baseline.
+
 Implemented October 3, 2026. This is M0/M1: an open-water trial with one disabled
 boat, point ripples, pause/reset and the existing ocean tuning mode. M2 supplies
 rocks, collision, docking and crash/retry. There is no win/loss condition yet.

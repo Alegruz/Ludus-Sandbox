@@ -1,5 +1,8 @@
 # Drift ripple game architecture
 
+The [physics and fluid implementation](PHYSICS_FLUID_SIMULATION.md) adds checked
+SDK kernels and validated current/drag tuning to this baseline.
+
 Status: Game contracts, updated October 3, 2026. M0/M1 is implemented in
 `src/game/ripple_game.*` and `game_render.*`, with scene ownership in the existing
 ocean controller. Collision, docking and level modules below remain proposed.
@@ -14,7 +17,7 @@ pass. The CPU is authoritative for ripple contact and boat collision.
 ## Baseline and dependency boundary
 
 Sandbox currently consumes an installed SDK with `find_package(Ludus CONFIG
-REQUIRED)`, pins engine revision `b87895f291575f57c090cd72e7dd2d145eb6ad8c`
+REQUIRED)`, pins engine revision `9554d051b2125580327d9f89c06395798a53028d`
 in `config/ludus-version.txt`, and owns `src/ocean`, `shaders/ocean.slang`, and
 `web/shell.html`. See [BUILD.md](BUILD.md) and [VALIDATION.md](VALIDATION.md).
 The implementation record distinguishes local SDK overrides and software-GPU
