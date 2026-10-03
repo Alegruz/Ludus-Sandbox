@@ -1,5 +1,7 @@
 # Drift ocean validation
 
+The current M0/M1 boat and ripple slice has its own [implementation and validation record](RIPPLE_GAME_IMPLEMENTATION.md). The ocean-only evidence below describes the earlier baseline.
+
 The WebGL fallback work consumes the public installed SDK from [engine PR #56](https://github.com/Alegruz/Ludus/pull/56).
 The exact engine commit is in `config/ludus-version.txt`; the tested Release ZIP
 records that commit and the pinned toolchains in `build-info.json`.

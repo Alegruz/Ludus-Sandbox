@@ -1,5 +1,6 @@
 #include "ocean/ocean_scene.h"
 
+#include "game/game_render.h"
 #include "ocean/ocean_uniforms.h"
 
 // Generated at build time by ludus_compile_shader(NAME ocean ...). Provides
@@ -9,6 +10,7 @@
 
 #include <ludus/foundation/profiling/clock.hpp>
 
+#include <cmath>
 #include <span>
 
 namespace ludus::sandbox
@@ -39,6 +41,7 @@ void OceanScene::Shutdown() noexcept
     mState = SceneState::Stopped;
     mError = rhi::StartupError::None;
     mLastTick = 0;
+    CancelGameInput();
 }
 
 void OceanScene::Fail(SceneState state, rhi::StartupError error) noexcept
@@ -53,7 +56,6 @@ bool OceanScene::Start(rhi::BackendSelection selection) noexcept
 {
     Shutdown();
     mStartup = {};
-    mClock = {};
     mFrames = 0;
 
     platform::WindowManager manager;
@@ -142,7 +144,11 @@ rhi::FrameStatus OceanScene::RenderFrame(const platform::browser::WindowState& i
 
     // Seed the uniform before the first draw (required by the contract). We fill
     // it with the current extent; GetFrameInfo may refine it after BeginFrame.
-    ocean::OceanUniforms uniforms = ocean::BuildUniforms(settings, mClock, width, height);
+    const auto buildUniforms = [&](uint32 w, uint32 h) noexcept {
+        return mGameEnabled ? game::BuildUniforms(settings, mClock, w, h, mGame, IsPaused() || !mFocused || !mVisible)
+                            : ocean::BuildUniforms(settings, mClock, w, h);
+    };
+    ocean::OceanUniforms uniforms = buildUniforms(width, height);
     const auto uploadBytes = [&uniforms]() noexcept {
         return std::span<const uint8>(reinterpret_cast<const uint8*>(&uniforms), sizeof(uniforms));
     };
@@ -188,7 +194,8 @@ rhi::FrameStatus OceanScene::RenderFrame(const platform::browser::WindowState& i
     const rhi::FrameInfo info = rhi::GetFrameInfo();
     const uint32 frameW = info.Width > 0 ? info.Width : width;
     const uint32 frameH = info.Height > 0 ? info.Height : height;
-    uniforms = ocean::BuildUniforms(settings, mClock, frameW, frameH);
+    uniforms = buildUniforms(frameW, frameH);
+    mCamera = game::FitCamera(frameW, frameH);
     if (rhi::UpdateUniform(mUniform, uploadBytes()) != rhi::ResourceStatus::Ready ||
         rhi::DrawFullscreen(mPipeline) != rhi::ResourceStatus::Ready)
     {
@@ -213,8 +220,13 @@ SceneState OceanScene::Tick() noexcept
     // Elapsed time with a monotonic nanosecond clock; delta is sanitized by the
     // scene clock (clamped resume, freeze while hidden).
     const auto now = profiling::NowTicks();
-    const float64 delta = now >= mLastTick ? static_cast<float64>(now - mLastTick) / 1000000000.0 : 0.0;
+    float64 delta = now >= mLastTick ? static_cast<float64>(now - mLastTick) / 1000000000.0 : 0.0;
     mLastTick = now;
+    if (mSkipDelta)
+    {
+        delta = 0.0;
+        mSkipDelta = false;
+    }
 
     const auto startup = rhi::GetStartup();
     mStartup = startup;
@@ -269,8 +281,13 @@ SceneState OceanScene::Tick() noexcept
 
     // Advance the simulation using only VISIBLE time. SetVisible from the driver
     // can also force-freeze; combine both signals.
-    const bool visible = mVisible && input.Visible;
-    ocean::Advance(mClock, mStore->Get(), delta, visible);
+    const bool visible = mVisible && input.Visible && mFocused;
+    const auto previousTicks = mGame.Ticks();
+    mGame.Advance(delta, visible && !IsPaused() && mGameEnabled);
+    const float64 visualDelta =
+        mGameEnabled ? static_cast<float64>(mGame.Ticks() - previousTicks) * game::kTickSeconds : delta;
+    // Gameplay advances the ocean on committed ticks, never ahead of its rings.
+    ocean::Advance(mClock, mStore->Get(), visualDelta, visible);
 
     const rhi::FrameStatus rendered = RenderFrame(input);
     if (rendered == rhi::FrameStatus::Failed || rendered == rhi::FrameStatus::InvalidState)
@@ -285,6 +302,19 @@ SceneState OceanScene::Tick() noexcept
         ++mFrames;
     }
     return mState;
+}
+
+game::PlacementResult OceanScene::PlaceRipple(float64 x, float64 y) noexcept
+{
+    if (mState != SceneState::Playing || !mGameEnabled || IsPaused() || !mVisible || !mFocused)
+    {
+        return game::PlacementResult::Inactive;
+    }
+    if (!std::isfinite(x) || !std::isfinite(y) || x < 0.0 || x > 1.0 || y < 0.0 || y > 1.0)
+    {
+        return game::PlacementResult::Outside;
+    }
+    return mGame.Place(game::ScreenToWorld({x, y}, mCamera));
 }
 
 } // namespace ludus::sandbox

@@ -1,21 +1,21 @@
-# Ludus-Sandbox — Drift ocean playground
+# Ludus-Sandbox — Drift ripple boat
 
 External sandbox application for developing and validating the Ludus engine SDK.
 
-This checkout contains **Drift**, a runnable top-down stylized 2D ocean
-playground built on the Ludus public fullscreen rendering API. It renders a
-single procedural fullscreen pass (authored in Slang, compiled to SPIR-V for the
-native Vulkan backend, WGSL for WebGPU, and GLSL ES 3.00 for WebGL 2) and drives it with
-a GPU-free scene/tuning layer and an accessible tuning panel.
+This checkout contains **Drift**, a top-down 2D water playground with a first
+playable boat/ripple slice. Click or tap the water to create an expanding ring;
+the ring pushes the disabled boat away from its origin when it reaches the hull.
+Pause, reset the boat, or switch to the existing ocean tuning mode.
 
-![Drifting ocean](docs/screenshots/ocean-drifting-1080p.png)
+Rendering uses one procedural fullscreen pass authored in Slang, compiled to
+SPIR-V for native Vulkan, WGSL for WebGPU, and generated GLSL ES for WebGL 2.
+Game rules and state live in this repository and consume the installed Ludus SDK.
 
-## What this is (and is not)
+![Boat and ripple in the browser](docs/screenshots/ripple-mouse.png)
 
-* A usable ocean playground: an animated overhead ocean, live controls, presets,
-  pause/reset, and a versioned-JSON settings workflow.
-* **Not** yet a game: floating objects, boats, wakes, collision, audio, scoring
-  and game rules are explicitly left for a later iteration.
+The browser build is the playable target. Native compilation is verified, but
+native pointer controls have not been connected. Rocks, docking, crash/retry,
+and levels are the next milestone.
 
 ## Highlights
 
@@ -41,6 +41,10 @@ a GPU-free scene/tuning layer and an accessible tuning panel.
 | --- | --- |
 | [docs/BUILD.md](docs/BUILD.md) | Exact, reproducible build / run / package commands (native + web), required engine revision and SDK variant. |
 | [docs/DESIGN.md](docs/DESIGN.md) | World units, coordinate orientation, aspect-correct mapping, current/time continuity, architecture, and the uniform contract. |
+| [Ripple game design](docs/RIPPLE_GAME_DESIGN.md) | Boat, ripple steering, hazards, docking, touch controls, and first levels. |
+| [Ripple game architecture](docs/RIPPLE_GAME_ARCHITECTURE.md) | Simulation timing, input, collision, shader snapshot, and engine/host boundaries. |
+| [Ripple game milestones](docs/RIPPLE_GAME_MILESTONES.md) | Acceptance gates from the existing ocean to a packaged browser game. |
+| [First playable implementation](docs/RIPPLE_GAME_IMPLEMENTATION.md) | Implemented controls, tuning, exact validation and remaining acceptance. |
 | [docs/VALIDATION.md](docs/VALIDATION.md) | Honest validation results: what was verified here, what requires a GPU host, and how to reproduce the remaining checks. |
 
 CI (`.github/workflows/ci.yml`) defines three gates on every push/PR:
@@ -79,12 +83,14 @@ ctest --test-dir out/build/linux-clang-development --output-on-failure
 
 ```
 shaders/ocean.slang        Author-owned ocean (SPIR-V + WGSL + GLSL ES)
+src/game/                  Fixed-tick boat/ripple physics and render snapshots
 src/ocean/                 GPU-free scene & tuning (settings, clock, uniforms, mapping)
 src/ocean/ocean_scene.*    RHI lifecycle driver (public API only)
 src/main_native.cpp        Native entry (config/CLI settings)
 src/main_web.cpp           Web entry + DOM bridge
 web/shell.html             Accessible collapsible tuning panel
-tests/ocean_tests.cpp      Focused host tests (validation, mapping, continuity)
+tests/ocean_tests.cpp      Ocean validation, mapping and continuity tests
+tests/ripple_tests.cpp     Ring contact, steering, timing and snapshot tests
 tools/preview/             Offline CPU renderer for screenshots (not shipped in the game)
 docs/                      Build, design, validation docs + screenshots
 ```

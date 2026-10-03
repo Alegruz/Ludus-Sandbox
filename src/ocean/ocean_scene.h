@@ -21,6 +21,8 @@
 #include <ludus/platform/base/window.h>
 #include <ludus/platform/browser/window.h>
 
+#include "game/ripple_game.h"
+
 #include "ocean/ocean_clock.h"
 #include "ocean/ocean_settings.h"
 #include "ocean/settings_store.h"
@@ -77,10 +79,12 @@ public:
     void SetVisible(bool visible) noexcept
     {
         mVisible = visible;
+        CancelGameInput();
     }
     void SetPaused(bool paused) noexcept
     {
         mClock.Paused = paused;
+        CancelGameInput();
     }
     [[nodiscard]] bool IsPaused() const noexcept
     {
@@ -89,6 +93,33 @@ public:
     void ResetSimulation() noexcept
     {
         ocean::ResetTime(mClock);
+        mGame.Reset();
+        CancelGameInput();
+    }
+
+    [[nodiscard]] game::PlacementResult PlaceRipple(foundation::float64 x, foundation::float64 y) noexcept;
+    [[nodiscard]] const game::RippleGame& GetGame() const noexcept
+    {
+        return mGame;
+    }
+    [[nodiscard]] bool GameEnabled() const noexcept
+    {
+        return mGameEnabled;
+    }
+    void SetGameEnabled(bool enabled) noexcept
+    {
+        mGameEnabled = enabled;
+        CancelGameInput();
+    }
+    void SetFocused(bool focused) noexcept
+    {
+        mFocused = focused;
+        CancelGameInput();
+    }
+    void CancelGameInput() noexcept
+    {
+        mGame.CancelInput();
+        mSkipDelta = true;
     }
 
 private:
@@ -108,6 +139,11 @@ private:
     bool mUniformSeeded = false;
 
     ocean::SceneClock mClock;
+    game::RippleGame mGame;
+    game::Camera mCamera;
+    bool mGameEnabled = true;
+    bool mFocused = true;
+    bool mSkipDelta = true;
     SceneState mState = SceneState::Stopped;
     rhi::StartupInfo mStartup;
     rhi::StartupError mError = rhi::StartupError::None;
