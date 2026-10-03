@@ -235,6 +235,205 @@ void TestCameraAndSnapshot() noexcept
     CHECK(game.Ticks() == 0 && game.Placements() == 0 && game.Contacts() == 0);
     CHECK(Near(game.GetBoat().Position.X, 0));
 }
+void TestLevelValidation() noexcept
+{
+    RippleGame game;
+    const auto course = RescueLevel();
+    CHECK(game.LoadLevel(course));
+    CHECK(Near(game.GetBoat().Position.Y, -22.0));
+    CHECK(game.GetLevel().RockCount == 1);
+    (void)game.Place({0.0, -27.0});
+    auto bad = course;
+    bad.Spawn = {0.0, 0.0};
+    CHECK(!game.LoadLevel(bad));
+    CHECK(Near(game.GetBoat().Position.Y, -22.0));
+    game.Tick();
+    CHECK(game.Placements() == 1); // Rejection preserves queued input too.
+    bad = course;
+    bad.RockCount = kRockCapacity + 1;
+    CHECK(!game.LoadLevel(bad));
+    bad = course;
+    bad.RockCount = 2;
+    bad.Rocks[1] = course.Rocks[0];
+    CHECK(!game.LoadLevel(bad));
+    bad = course;
+    bad.Rocks[0].Radius = -1.0;
+    CHECK(!game.LoadLevel(bad));
+    bad = course;
+    bad.Rocks[0].Center.X = std::numeric_limits<float64>::quiet_NaN();
+    CHECK(!game.LoadLevel(bad));
+    bad = course;
+    bad.DockCenter = {0.0, 0.0};
+    CHECK(!game.LoadLevel(bad));
+    bad = course;
+    bad.DockRadius = kBoatRadius;
+    CHECK(!game.LoadLevel(bad));
+    bad = course;
+    bad.HalfExtent.X = std::numeric_limits<float64>::infinity();
+    CHECK(!game.LoadLevel(bad));
+    bad = course;
+    bad.Spawn = {29.0, 0.0};
+    CHECK(!game.LoadLevel(bad));
+    bad = course;
+    bad.SpawnVelocity = {8.0, 0.0};
+    CHECK(!game.LoadLevel(bad));
+    bad = course;
+    bad.DockDwellTicks = 0;
+    CHECK(!game.LoadLevel(bad));
+    CHECK(game.GetLevel().Id == course.Id);
+    CHECK(game.Placements() == 1);
+}
+
+void TestSweptHazardsAndRetry() noexcept
+{
+    float64 time = -1.0;
+    CHECK(CircleContact({-100, 0}, {100, 0}, {0, 0}, 3, time));
+    CHECK(Near(time, 0.485)); // Both endpoints miss; the full sweep hits.
+    CHECK(CircleContact({-4, 3}, {4, 3}, {0, 0}, 3, time));
+    CHECK(Near(time, 0.5));
+    CHECK(CircleContact({0, 0}, {0, 0}, {0, 0}, 3, time));
+    CHECK(Near(time, 0));
+    time = -1.0;
+    CHECK(!CircleContact({-4, 4}, {4, 4}, {0, 0}, 3, time));
+    CHECK(Near(time, -1));
+    CHECK(!CircleContact({0, 0}, {1, 0}, {0, 0}, -1, time));
+    CHECK(!CircleContact({std::numeric_limits<float64>::quiet_NaN(), 0}, {1, 0}, {0, 0}, 1, time));
+    CHECK(Near(time, -1));
+
+    RippleGame game;
+    PhysicsSettings physics;
+    physics.DragRate = 0.0;
+    physics.MaxBoatSpeed = 100.0;
+    CHECK(game.SetPhysics(physics));
+    LevelDefinition level;
+    level.Spawn = {-3.1, 0.0};
+    level.SpawnVelocity = {100.0, 0.0};
+    level.RockCount = 1;
+    level.Rocks[0] = {.Center = {0.0, 0.0}, .Radius = 1.0, .Id = 1};
+    CHECK(game.LoadLevel(level));
+    (void)game.Place({-0.4, 0.0}); // This band would touch AFTER the crash.
+    game.Advance(0.1, true);
+    CHECK(game.Phase() == GamePhase::Crashed);
+    CHECK(game.Crash() == CrashReason::Rock);
+    CHECK(Near(game.GetBoat().Position.X, -3.0));
+    CHECK(game.Contacts() == 0);
+    CHECK(game.Ticks() == 1);
+    CHECK(game.TerminalTransitions() == 1);
+    CHECK(Near(game.Alpha(), 0.0));
+    const auto age = game.GetRipples()[0].Age;
+    CHECK(Near(age, 0.001)); // Rings freeze at the same collision time.
+    CHECK(game.Place({-5, 0}) == PlacementResult::Inactive);
+    game.Tick();
+    game.Advance(1.0, true);
+    CHECK(game.Ticks() == 1 && game.TerminalTransitions() == 1);
+    CHECK(Near(game.GetRipples()[0].Age, age));
+    using namespace ludus::sandbox::ocean;
+    const auto snapshot = BuildUniforms(DefaultSettings(), {}, 960, 540, game, false);
+    CHECK(Near(snapshot.BoatInfo[0], -3.0)); // Terminal transforms never interpolate across a rock.
+    CHECK(snapshot.LevelInfo[1] == 1.0F);
+    CHECK(snapshot.Rocks[0][2] == 1.0F);
+    CHECK(snapshot.Rocks[1][2] == 0.0F);
+
+    for (uint32 retry = 0; retry < 30; ++retry)
+    {
+        game.Reset();
+        CHECK(game.Phase() == GamePhase::Playing);
+        CHECK(game.Crash() == CrashReason::None);
+        CHECK(game.Ticks() == 0 && game.Contacts() == 0 && game.Placements() == 0);
+        CHECK(game.ActiveRipples() == 0 && Near(game.CooldownFraction(), 0));
+        CHECK(Near(game.GetBoat().Position.X, level.Spawn.X));
+        CHECK(Near(game.GetBoat().PreviousPosition.X, level.Spawn.X));
+        CHECK(Near(game.GetBoat().Velocity.X, 100.0));
+        (void)game.Place(level.Spawn); // Contact at t=0 is eligible before the crash.
+        game.Tick();
+        CHECK(game.Contacts() == 1 && game.TerminalTransitions() == 1);
+        CHECK(game.GetRipples()[0].Id == 1);
+    }
+
+    level.RockCount = 0;
+    level.BoundaryHazard = true;
+    level.Spawn = {27.9, 0.0};
+    CHECK(game.LoadLevel(level));
+    game.Tick();
+    CHECK(game.Phase() == GamePhase::Crashed && game.Crash() == CrashReason::Boundary);
+    CHECK(Near(game.GetBoat().Position.X, 28.0));
+    CHECK(Near(game.GetBoat().Position.Y, 0.0));
+    level.Spawn = {0.0, -37.9};
+    level.SpawnVelocity = {0.0, -100.0};
+    CHECK(game.LoadLevel(level));
+    game.Tick();
+    CHECK(game.Crash() == CrashReason::Boundary);
+    CHECK(Near(game.GetBoat().Position.Y, -38.0));
+}
+
+void TestDocking() noexcept
+{
+    RippleGame game;
+    PhysicsSettings physics;
+    physics.DragRate = 0.0;
+    CHECK(game.SetPhysics(physics));
+    LevelDefinition level;
+    level.DockRadius = 5.0;
+    level.SpawnVelocity = {1.5, 0.0};
+    CHECK(game.LoadLevel(level));
+    for (uint32 i = 0; i < 23; ++i)
+        game.Tick();
+    CHECK(game.Phase() == GamePhase::Playing);
+    CHECK(Near(game.DockProgress(), 23.0 / 24.0));
+    game.Advance(0.1, false);
+    CHECK(Near(game.DockProgress(), 23.0 / 24.0));
+    game.Tick();
+    CHECK(game.Phase() == GamePhase::Arrived);
+    CHECK(Near(game.DockProgress(), 1.0));
+    CHECK(game.TerminalTransitions() == 1);
+    CHECK(game.Place({1.0, 0.0}) == PlacementResult::Inactive);
+    game.Advance(1.0, true);
+    game.Tick();
+    CHECK(game.Ticks() == 24 && game.TerminalTransitions() == 1);
+    game.Reset();
+    CHECK(Near(game.DockProgress(), 0));
+    CHECK(game.Phase() == GamePhase::Playing);
+
+    level.SpawnVelocity = {2.0, 0.0};
+    CHECK(game.LoadLevel(level));
+    for (uint32 i = 0; i < 24; ++i)
+        game.Tick();
+    CHECK(game.Phase() == GamePhase::Playing && Near(game.DockProgress(), 0));
+    level.Spawn = {2.9, 0.0};
+    level.SpawnVelocity = {1.5, 0.0};
+    CHECK(game.LoadLevel(level));
+    game.Tick();
+    CHECK(game.DockProgress() > 0);
+    for (uint32 i = 0; i < 5; ++i)
+        game.Tick();
+    CHECK(Near(game.DockProgress(), 0)); // The WHOLE hull must remain inside.
+
+    level.Spawn = {};
+    level.SpawnVelocity = {};
+    CHECK(game.LoadLevel(level));
+    for (uint32 i = 0; i < 10; ++i)
+        game.Tick();
+    physics.DragRate = 100.0;
+    physics.WaterVelocity = {7.0, 0.0};
+    CHECK(game.SetPhysics(physics));
+    game.Tick();
+    CHECK(Near(game.DockProgress(), 0)); // Excess speed resets accumulated dwell.
+
+    physics.DragRate = 0.0;
+    physics.WaterVelocity = {};
+    CHECK(game.SetPhysics(physics));
+    level.DockCenter = {24.9, 0.0};
+    level.Spawn = {27.7, 0.0};
+    level.SpawnVelocity = {1.5, 0.0};
+    level.BoundaryHazard = true;
+    CHECK(game.LoadLevel(level));
+    for (uint32 i = 0; i < 20; ++i)
+        game.Tick();
+    CHECK(game.Phase() == GamePhase::Crashed); // Brief dock overlap cannot defeat a crash.
+    CHECK(Near(game.DockProgress(), 0));
+    CHECK(game.TerminalTransitions() == 1);
+}
+
 } // namespace
 
 int main()
@@ -245,6 +444,9 @@ int main()
     TestPresentationRates();
     TestCameraAndSnapshot();
     TestPhysicalCurrentAndTuning();
+    TestLevelValidation();
+    TestSweptHazardsAndRetry();
+    TestDocking();
     std::printf("Ripple game: %d checks, %d failures\n", gChecks, gFailures);
     return gFailures == 0 ? 0 : 1;
 }

@@ -1,3 +1,7 @@
+The next slice now implements the complete rock/dock/crash/retry loop. See
+[M2 implementation and validation](RIPPLE_GAME_M2.md) for current behavior; the
+M0/M1 record below describes the original open-water baseline.
+
 # Drift first playable slice
 
 The [physics and fluid implementation](PHYSICS_FLUID_SIMULATION.md) adds checked

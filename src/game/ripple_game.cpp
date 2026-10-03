@@ -20,22 +20,137 @@ constexpr float64 kContactBand = kBoatRadius + kRingHalfWidth;
     return std::hypot(p.X, p.Y);
 }
 
-[[nodiscard]] bool InWater(Point p) noexcept
+[[nodiscard]] bool InWater(Point p, Point halfExtent) noexcept
 {
-    return std::isfinite(p.X) && std::isfinite(p.Y) && std::abs(p.X) <= 30.0 && std::abs(p.Y) <= 40.0;
+    return std::isfinite(p.X) && std::isfinite(p.Y) && std::abs(p.X) <= halfExtent.X && std::abs(p.Y) <= halfExtent.Y;
+}
+[[nodiscard]] bool CircleInside(Point center, float64 radius, Point halfExtent) noexcept
+{
+    return InWater(center, halfExtent) && std::abs(center.X) + radius < halfExtent.X &&
+           std::abs(center.Y) + radius < halfExtent.Y;
 }
 } // namespace
 
-Camera FitCamera(uint32 width, uint32 height) noexcept
+Camera FitCamera(uint32 width, uint32 height, Point halfExtent) noexcept
 {
     if (width == 0 || height == 0)
     {
         return {};
     }
     const float64 aspect = static_cast<float64>(width) / height;
-    const float64 fitHeight = 70.0 / aspect;
-    const float64 viewHeight = fitHeight > 90.0 ? fitHeight : 90.0;
+    const float64 fitHeight = (halfExtent.X * 2.0 + 10.0) / aspect;
+    const float64 levelHeight = halfExtent.Y * 2.0 + 10.0;
+    const float64 viewHeight = fitHeight > levelHeight ? fitHeight : levelHeight;
     return {viewHeight * aspect, viewHeight};
+}
+
+LevelDefinition RescueLevel() noexcept
+{
+    LevelDefinition level;
+    level.Spawn = {0.0, -22.0};
+    level.RockCount = 1;
+    level.Rocks[0] = {.Center = {0.0, 0.0}, .Radius = 5.0, .Id = 1};
+    level.DockCenter = {0.0, 24.0};
+    level.DockRadius = 5.0;
+    level.BoundaryHazard = true;
+    return level;
+}
+
+bool CircleContact(Point start, Point end, Point origin, float64 radius, float64& time) noexcept
+{
+    if (!std::isfinite(start.X) || !std::isfinite(start.Y) || !std::isfinite(end.X) || !std::isfinite(end.Y) ||
+        !std::isfinite(origin.X) || !std::isfinite(origin.Y) || !std::isfinite(radius) || radius < 0.0)
+    {
+        return false;
+    }
+#if defined(LUDUS_SANDBOX_WITH_SDK)
+    using namespace ludus::foundation::math;
+    RadialSweepContact contact;
+    if (!IsSuccess(TrySweepRadialBand({start.X, start.Y, 0.0},
+                                      {end.X, end.Y, 0.0},
+                                      {origin.X, origin.Y, 0.0},
+                                      0.0,
+                                      0.0,
+                                      radius,
+                                      contact)) ||
+        !contact.Hit)
+    {
+        return false;
+    }
+    time = contact.Fraction;
+    return true;
+#else
+    const Point p{start.X - origin.X, start.Y - origin.Y};
+    const Point d{end.X - start.X, end.Y - start.Y};
+    const float64 c = p.X * p.X + p.Y * p.Y - radius * radius;
+    if (c <= 0.0)
+    {
+        time = 0.0;
+        return true;
+    }
+    const float64 a = d.X * d.X + d.Y * d.Y;
+    const float64 b = 2.0 * (p.X * d.X + p.Y * d.Y);
+    const float64 discriminant = b * b - 4.0 * a * c;
+    if (a == 0.0 || b >= 0.0 || !std::isfinite(discriminant) || discriminant < 0.0)
+    {
+        return false;
+    }
+    // Stable entering root for an initially separated, approaching hull.
+    const float64 t = 2.0 * c / (-b + std::sqrt(discriminant));
+    if (t < 0.0 || t > 1.0)
+    {
+        return false;
+    }
+    time = t;
+    return true;
+#endif
+}
+
+bool RippleGame::LoadLevel(const LevelDefinition& level) noexcept
+{
+    if (level.Id == 0 || !std::isfinite(level.HalfExtent.X) || !std::isfinite(level.HalfExtent.Y) ||
+        level.HalfExtent.X <= kBoatRadius || level.HalfExtent.Y <= kBoatRadius || level.HalfExtent.X > 1000.0 ||
+        level.HalfExtent.Y > 1000.0 || !CircleInside(level.Spawn, kBoatRadius, level.HalfExtent) ||
+        !std::isfinite(level.SpawnVelocity.X) || !std::isfinite(level.SpawnVelocity.Y) ||
+        Length(level.SpawnVelocity) > mPhysics.MaxBoatSpeed || level.RockCount > kRockCapacity ||
+        !std::isfinite(level.DockCenter.X) || !std::isfinite(level.DockCenter.Y) || !std::isfinite(level.DockRadius) ||
+        level.DockRadius < 0.0 || !std::isfinite(level.DockSpeed) || level.DockSpeed <= 0.0 ||
+        level.DockDwellTicks == 0 || level.DockDwellTicks > 600)
+    {
+        return false;
+    }
+    if (level.DockRadius > 0.0 &&
+        (level.DockRadius <= kBoatRadius || !CircleInside(level.DockCenter, level.DockRadius, level.HalfExtent)))
+    {
+        return false;
+    }
+    for (usize i = 0; i < level.RockCount; ++i)
+    {
+        const auto& rock = level.Rocks[i];
+        if (rock.Id == 0 || !std::isfinite(rock.Radius) || rock.Radius <= 0.0 ||
+            !CircleInside(rock.Center, rock.Radius, level.HalfExtent) ||
+            Length({level.Spawn.X - rock.Center.X, level.Spawn.Y - rock.Center.Y}) <= kBoatRadius + rock.Radius ||
+            (level.DockRadius > 0.0 && Length({level.DockCenter.X - rock.Center.X,
+                                               level.DockCenter.Y - rock.Center.Y}) <= level.DockRadius + rock.Radius))
+        {
+            return false;
+        }
+        for (usize j = 0; j < i; ++j)
+        {
+            if (rock.Id == level.Rocks[j].Id)
+            {
+                return false;
+            }
+        }
+    }
+    mLevel = level;
+    Reset();
+    return true;
+}
+
+float64 RippleGame::DockProgress() const noexcept
+{
+    return static_cast<float64>(mDockTicks) / mLevel.DockDwellTicks;
 }
 
 Point ScreenToWorld(Point normalized, Camera camera) noexcept
@@ -126,7 +241,7 @@ bool RippleGame::SetPhysics(const PhysicsSettings& settings) noexcept
         !std::isfinite(settings.PushSpeed) || settings.PushSpeed < 0.0 || settings.PushSpeed > 100.0 ||
         !std::isfinite(settings.MaxBoatSpeed) || settings.MaxBoatSpeed <= 0.0 || settings.MaxBoatSpeed > 100.0 ||
         !std::isfinite(settings.WaterVelocity.X) || !std::isfinite(settings.WaterVelocity.Y) ||
-        Length(settings.WaterVelocity) > settings.MaxBoatSpeed)
+        Length(settings.WaterVelocity) > settings.MaxBoatSpeed || Length(mLevel.SpawnVelocity) > settings.MaxBoatSpeed)
     {
         return false;
     }
@@ -156,7 +271,11 @@ bool RippleGame::SetPhysics(const PhysicsSettings& settings) noexcept
 
 PlacementResult RippleGame::Place(Point world) noexcept
 {
-    if (!InWater(world))
+    if (mPhase != GamePhase::Playing)
+    {
+        mLastPlacement = PlacementResult::Inactive;
+    }
+    else if (!InWater(world, mLevel.HalfExtent))
     {
         mLastPlacement = PlacementResult::Outside;
     }
@@ -186,8 +305,17 @@ void RippleGame::CancelInput() noexcept
 void RippleGame::Reset() noexcept
 {
     const auto settings = mPhysics;
+    const auto level = mLevel;
     *this = RippleGame{};
+    mLevel = level;
     (void)SetPhysics(settings);
+    mBoat.Position = level.Spawn;
+    mBoat.PreviousPosition = level.Spawn;
+    mBoat.Velocity = level.SpawnVelocity;
+    if (Length(mBoat.Velocity) > 0.05)
+    {
+        mBoat.Heading = std::atan2(mBoat.Velocity.Y, mBoat.Velocity.X);
+    }
 }
 
 uint32 RippleGame::ActiveRipples() const noexcept
@@ -202,7 +330,7 @@ uint32 RippleGame::ActiveRipples() const noexcept
 
 void RippleGame::Advance(float64 delta, bool running) noexcept
 {
-    if (!running)
+    if (!running || mPhase != GamePhase::Playing)
     {
         CancelInput();
         return;
@@ -213,11 +341,16 @@ void RippleGame::Advance(float64 delta, bool running) noexcept
     }
     mAccumulator += delta > 0.1 ? 0.1 : delta;
     uint32 steps = 0;
-    while (mAccumulator + kEpsilon >= kTickSeconds && steps < 4)
+    while (mAccumulator + kEpsilon >= kTickSeconds && steps < 4 && mPhase == GamePhase::Playing)
     {
         Tick();
         mAccumulator -= kTickSeconds;
         ++steps;
+    }
+    if (mPhase != GamePhase::Playing)
+    {
+        CancelInput();
+        return;
     }
     if (mAccumulator < 0.0)
     {
@@ -232,6 +365,10 @@ void RippleGame::Advance(float64 delta, bool running) noexcept
 
 void RippleGame::Tick() noexcept
 {
+    if (mPhase != GamePhase::Playing)
+    {
+        return;
+    }
     if (mCooldown > 0)
     {
         --mCooldown;
@@ -281,6 +418,51 @@ void RippleGame::Tick() noexcept
     mBoat.Velocity.Y = current.Y + relativeVelocity.Y * mVelocityScale;
     mBoat.ContactFlash = mBoat.ContactFlash > kTickSeconds ? mBoat.ContactFlash - kTickSeconds : 0.0;
 
+    // Cut the boat/ripple interval at the first crash. Later contacts cannot
+    // push the hull through a hazard, and docking is evaluated only if alive.
+    float64 travelFraction = 1.0;
+    CrashReason crash = CrashReason::None;
+    const auto recordCrash = [&](float64 time, CrashReason reason) noexcept {
+        if (time >= 0.0 && time <= travelFraction)
+        {
+            travelFraction = time;
+            crash = reason;
+        }
+    };
+    if (mLevel.BoundaryHazard)
+    {
+        struct AxisSweep final
+        {
+            float64 Start;
+            float64 Finish;
+            float64 HalfExtent;
+        };
+        const auto boundary = [&](const AxisSweep& axis) noexcept {
+            const float64 start = axis.Start;
+            const float64 finish = axis.Finish;
+            const float64 limit = axis.HalfExtent - kBoatRadius;
+            if (finish >= limit && finish != start)
+            {
+                recordCrash((limit - start) / (finish - start), CrashReason::Boundary);
+            }
+            if (finish <= -limit && finish != start)
+            {
+                recordCrash((-limit - start) / (finish - start), CrashReason::Boundary);
+            }
+        };
+        boundary({mBoat.Position.X, end.X, mLevel.HalfExtent.X});
+        boundary({mBoat.Position.Y, end.Y, mLevel.HalfExtent.Y});
+    }
+    for (usize i = 0; i < mLevel.RockCount; ++i)
+    {
+        const auto& rock = mLevel.Rocks[i];
+        float64 time = 0.0;
+        if (CircleContact(mBoat.Position, end, rock.Center, rock.Radius + kBoatRadius, time))
+        {
+            recordCrash(time, CrashReason::Rock);
+        }
+    }
+
     struct Contact final
     {
         float64 Time;
@@ -297,7 +479,8 @@ void RippleGame::Tick() noexcept
         }
         ripple.PreviousAge = ripple.Age;
         const float64 remaining = kRippleLifetime - ripple.Age;
-        const float64 duration = remaining < kTickSeconds ? remaining : kTickSeconds;
+        const float64 interval = kTickSeconds * travelFraction;
+        const float64 duration = remaining < interval ? remaining : interval;
         const float64 fraction = duration / kTickSeconds;
         const Point clippedEnd{mBoat.Position.X + (end.X - mBoat.Position.X) * fraction,
                                mBoat.Position.Y + (end.Y - mBoat.Position.Y) * fraction};
@@ -342,7 +525,8 @@ void RippleGame::Tick() noexcept
             mBoat.ContactFlash = 0.18;
         }
     }
-    mBoat.Position = end;
+    mBoat.Position = {mBoat.Position.X + (end.X - mBoat.Position.X) * travelFraction,
+                      mBoat.Position.Y + (end.Y - mBoat.Position.Y) * travelFraction};
     const float64 speed = Length(mBoat.Velocity);
     if (speed > mPhysics.MaxBoatSpeed)
     {
@@ -352,6 +536,33 @@ void RippleGame::Tick() noexcept
     if (speed > 0.05)
     {
         mBoat.Heading = std::atan2(mBoat.Velocity.Y, mBoat.Velocity.X);
+    }
+    if (crash != CrashReason::None)
+    {
+        mCrash = crash;
+        mPhase = GamePhase::Crashed;
+        mDockTicks = 0;
+        mBoat.Velocity = {};
+        mBoat.ContactFlash = 0.18;
+        ++mTerminalTransitions;
+    }
+    else if (mLevel.DockRadius > 0.0)
+    {
+        const bool contained = Length({mBoat.Position.X - mLevel.DockCenter.X,
+                                       mBoat.Position.Y - mLevel.DockCenter.Y}) <= mLevel.DockRadius - kBoatRadius;
+        if (contained && Length(mBoat.Velocity) <= mLevel.DockSpeed)
+        {
+            ++mDockTicks;
+            if (mDockTicks >= mLevel.DockDwellTicks)
+            {
+                mPhase = GamePhase::Arrived;
+                ++mTerminalTransitions;
+            }
+        }
+        else
+        {
+            mDockTicks = 0;
+        }
     }
     for (auto& ripple : mRipples)
     {

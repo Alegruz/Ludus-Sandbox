@@ -6,10 +6,10 @@
 // "CPU layouts are application contracts"). The layout MUST match the std140
 // layout Slang assigns to the `OceanUniforms` constant buffer in
 // shaders/ocean.slang. The offsets below were taken from the Slang reflection
-// JSON (set/group 0, binding 0, total size 432) and are asserted so a mismatch
+// JSON (set/group 0, binding 0, total size 736) and are asserted so a mismatch
 // is a compile error, not a silent visual bug.
 //
-// The block is set/group 0, binding 0, visible to both stages, 432 bytes
+// The block is set/group 0, binding 0, visible to both stages, 736 bytes
 // (within the engine's 16..4096 byte, multiple-of-16 bound).
 
 #include "game/ripple_game.h"
@@ -57,6 +57,10 @@ struct alignas(16) OceanUniforms final
     float32 BoatInfo[4];                       // position.xy, heading, hull radius
     float32 GameInfo[4];                       // enabled, ring count, cooldown fraction, contact flash
     float32 Ripples[game::kRippleCapacity][4]; // origin.xy, radius, fade
+    float32 LevelBounds[4];                    // half width/height, reserved
+    float32 DockInfo[4];                       // center.xy, radius, maximum arrival speed
+    float32 LevelInfo[4];                      // rock count, phase, dock dwell fraction, boundary hazard
+    float32 Rocks[game::kRockCapacity][4];     // center.xy, radius, reserved
 };
 
 static_assert(std::is_standard_layout_v<OceanUniforms>);
@@ -77,7 +81,11 @@ static_assert(offsetof(OceanUniforms, FoamColor) == 128);
 static_assert(offsetof(OceanUniforms, BoatInfo) == 144);
 static_assert(offsetof(OceanUniforms, GameInfo) == 160);
 static_assert(offsetof(OceanUniforms, Ripples) == 176);
-static_assert(sizeof(OceanUniforms) == 432 && alignof(OceanUniforms) == 16);
+static_assert(offsetof(OceanUniforms, LevelBounds) == 432);
+static_assert(offsetof(OceanUniforms, DockInfo) == 448);
+static_assert(offsetof(OceanUniforms, LevelInfo) == 464);
+static_assert(offsetof(OceanUniforms, Rocks) == 480);
+static_assert(sizeof(OceanUniforms) == 736 && alignof(OceanUniforms) == 16);
 // Within the engine's uniform bounds (16..4096, multiple of 16).
 static_assert(sizeof(OceanUniforms) % 16 == 0 && sizeof(OceanUniforms) >= 16 && sizeof(OceanUniforms) <= 4096);
 

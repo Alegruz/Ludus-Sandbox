@@ -83,19 +83,25 @@ EM_JS(void, PublishSettings, (const char* json), {
     if (globalThis.__oceanOnSettings) globalThis.__oceanOnSettings(text);
 });
 EM_JS(void, PresentGame, (float64 x, float64 y, uint32 placements, uint32 contacts, uint32 ticks,
-                         uint32 rings, uint32 result, float64 cooldown, int paused, int enabled), {
+                         uint32 rings, uint32 result, float64 cooldown, int paused, int enabled,
+                         uint32 phase, uint32 crash, float64 vx, float64 vy, float64 docking), {
     const hud = document.getElementById('game-status');
     if (!hud) return;
     Object.assign(hud.dataset, {x, y, placements, contacts, ticks, rings, result, cooldown,
-                               paused: String(!!paused), enabled: String(!!enabled)});
+                               paused: String(!!paused), enabled: String(!!enabled), vx, vy, docking, crash,
+                               phase: ['playing', 'crashed', 'arrived'][phase]});
     const feedback = ['Click or tap water to send a ripple.', 'Ripple queued.', 'Ripple sent.',
                       'Ripple recharging...', 'Too many ripples. Wait a moment.',
                       'Place ripples inside the marked water.', 'Resume to place a ripple.'];
-    const message = !enabled ? 'Ocean tuning mode.' : paused ? 'Paused.' :
+    const message = !enabled ? 'Ocean tuning mode.' : phase === 1 ?
+                    (crash === 1 ? 'Crashed into a rock. Retry to rescue the boat.' : 'Reached the water boundary. Retry to rescue the boat.') :
+                    phase === 2 ? 'Boat rescued! Retry to sail the course again.' : paused ? 'Paused.' :
+                    docking > 0 ? 'Mooring… Keep the boat slow inside the green dock.' :
                     cooldown > 0 ? 'Ripple recharging...' : feedback[result] || feedback[0];
     if (hud.textContent !== message) hud.textContent = message;
     const button = document.getElementById('game-pause');
     button.textContent = paused ? 'Resume' : 'Pause';
+    button.disabled = enabled && phase !== 0;
     button.setAttribute('aria-pressed', String(!!paused));
     document.getElementById('mode').setAttribute('aria-pressed', String(!!enabled));
 });
@@ -133,7 +139,12 @@ void Frame() noexcept
                 static_cast<uint32>(game.LastPlacement()),
                 game.CooldownFraction(),
                 gScene.IsPaused() ? 1 : 0,
-                gScene.GameEnabled() ? 1 : 0);
+                gScene.GameEnabled() ? 1 : 0,
+                static_cast<uint32>(game.Phase()),
+                static_cast<uint32>(game.Crash()),
+                boat.Velocity.X,
+                boat.Velocity.Y,
+                game.DockProgress());
 }
 } // namespace
 

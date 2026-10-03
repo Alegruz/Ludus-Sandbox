@@ -62,7 +62,7 @@ try {
       assert.equal(Number(initial.placements), 0);
       const viewHeight = Math.max(90, 70 / (viewport.width / viewport.height));
       const x = viewport.width / 2 - 5 * viewport.height / viewHeight;
-      const y = viewport.height / 2;
+      const y = viewport.height / 2 + 22 * viewport.height / viewHeight;
       if (mobile) await page.touchscreen.tap(x, y); else await page.mouse.click(x, y);
       await until(() => state(page), s => Number(s.contacts) === 1 && Number(s.x) > 0.1, 'ring push');
       await page.locator('#game-pause').click();
@@ -70,7 +70,7 @@ try {
       const frozen = await state(page);
       assert.equal(Number(frozen.placements), 1, 'Tap/click emitted duplicate rings');
       assert.equal(Number(frozen.contacts), 1);
-      assert(Math.abs(Number(frozen.y)) < 0.001, 'Push direction/mapping is incorrect');
+      assert(Math.abs(Number(frozen.y) + 22) < 0.001, 'Push direction/mapping is incorrect');
       await delay(300);
       const later = await state(page);
       assert.equal(later.ticks, frozen.ticks, 'Paused game advanced');
@@ -82,11 +82,11 @@ try {
 
       await page.locator('#game-reset').click(); await delay(150);
       const reset = await state(page);
-      assert.equal(Number(reset.x), 0); assert.equal(Number(reset.placements), 0); assert.equal(Number(reset.rings), 0);
+      assert.equal(Number(reset.x), 0); assert.equal(Number(reset.y), -22); assert.equal(reset.phase, 'playing'); assert.equal(Number(reset.placements), 0); assert.equal(Number(reset.rings), 0);
       const before = Number(await page.locator('#status').getAttribute('data-frames'));
       await waitFrames(page, before + 2);
       const screenshot = PNG.sync.read(await page.screenshot());
-      const cx = Math.floor(screenshot.width / 2), cy = Math.floor(screenshot.height / 2);
+      const cx = Math.floor(screenshot.width / 2), cy = Math.floor(screenshot.height / 2 + 22 * screenshot.height / viewHeight);
       const pixel = (cy * screenshot.width + cx) * 4;
       assert(screenshot.data[pixel] > screenshot.data[pixel + 2] + 15, 'Boat is not visible at the physical center');
 
@@ -125,12 +125,65 @@ try {
       });
       await delay(250);
       assert.equal(Number((await state(page)).placements), 0, 'Cancelled pointer emitted a ripple');
-      const rx = 844 / 2 + 5 * 390 / 90, ry = 390 / 2;
+      const rx = 844 / 2 + 5 * 390 / 90, ry = 390 / 2 + 22 * 390 / 90;
       if (mobile) await page.touchscreen.tap(rx, ry); else await page.mouse.click(rx, ry);
       await until(() => state(page), s => Number(s.contacts) === 1 && Number(s.x) < -0.1, 'restart input');
       assert.equal(Number((await state(page)).placements), 1);
       assert.equal(errors.length, 0, errors.join('\n'));
-      report.cases.push({name, status: 'passed', push: frozen, errors});
+      // Navigate with real pointer placements; no simulation setters/test hooks.
+      await page.locator('#game-reset').click();
+      const placeWorld = async (worldX, worldY) => {
+        const size = page.viewportSize();
+        const height = Math.max(90, 70 / (size.width / size.height));
+        const px = size.width / 2 + worldX * size.height / height;
+        const py = size.height / 2 - worldY * size.height / height;
+        if (mobile) await page.touchscreen.tap(px, py); else await page.mouse.click(px, py);
+      };
+      const steer = async (waypoints, terminal, timeout = 180000) => {
+        let waypoint = 0;
+        const deadline = Date.now() + timeout;
+        while (Date.now() < deadline) {
+          const boat = await state(page);
+          if (boat.phase !== 'playing') {
+            assert.equal(boat.phase, terminal, 'Unexpected terminal state');
+            return boat;
+          }
+          const target = waypoints[waypoint];
+          const dx = target.x - Number(boat.x), dy = target.y - Number(boat.y);
+          const distance = Math.hypot(dx, dy);
+          if (distance < 2.5 && waypoint < waypoints.length - 1) { waypoint++; continue; }
+          const speed = Math.min(3.2, distance * 0.6);
+          const ex = distance > 0.01 ? dx / distance * speed - Number(boat.vx) : -Number(boat.vx);
+          const ey = distance > 0.01 ? dy / distance * speed - Number(boat.vy) : -Number(boat.vy);
+          const error = Math.hypot(ex, ey);
+          if (Number(boat.cooldown) === 0 && error > 1.1) {
+            await placeWorld(Number(boat.x) - ex / error * 3, Number(boat.y) - ey / error * 3);
+          }
+          await delay(70);
+        }
+        throw Error('Timeout: complete course with pointer ripples');
+      };
+      // A straight approach hits the rock; terminal input freezes until Retry.
+      const crashed = await steer([{x: 0, y: 24}], 'crashed');
+      assert.equal(Number(crashed.crash), 1);
+      await placeWorld(-5, -8); await delay(250);
+      assert.equal((await state(page)).ticks, crashed.ticks);
+      assert.equal((await state(page)).placements, crashed.placements);
+      await page.screenshot({path: resolve(output, name + '-crashed.png')});
+      await page.locator('#game-reset').click();
+      await until(() => state(page), s => s.phase === 'playing' && Number(s.placements) === 0, 'retry after crash');
+      const arrived = await steer([{x: 12, y: -22}, {x: 12, y: 24}, {x: 0, y: 24}], 'arrived');
+      assert.equal(Number(arrived.docking), 1);
+      assert(Math.hypot(Number(arrived.x), Number(arrived.y) - 24) <= 3.001, 'Hull is not contained in the dock');
+      assert(Math.hypot(Number(arrived.vx), Number(arrived.vy)) <= 1.5, 'Arrived too fast');
+      await page.screenshot({path: resolve(output, name + '-arrived.png')});
+      await page.evaluate(() => Module._OceanRestart());
+      await until(() => page.locator('#status').getAttribute('data-state'), s => s === 'playing', 'terminal graphics restart');
+      assert.equal((await state(page)).phase, 'arrived');
+      await page.locator('#game-reset').click();
+      await until(() => state(page), s => s.phase === 'playing' && Number(s.placements) === 0, 'retry after arrival');
+      assert.equal(errors.length, 0, errors.join('\n'));
+      report.cases.push({name, status: 'passed', push: frozen, crashed, arrived, errors});
       await context.close(); activePage = undefined;
     }
   }

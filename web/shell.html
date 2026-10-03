@@ -30,7 +30,7 @@
   #hud { position: fixed; inset: 10px; pointer-events: none; display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 320px); gap: 12px; align-items: start; }
   #status-region { pointer-events: auto; background: rgba(7,16,34,.86); border-radius: 12px;
-    padding: 10px 14px; max-width: 390px; }
+    padding: 10px 14px; max-width: 270px; }
   #status { margin: 0; overflow-wrap: anywhere; }
   #status[data-state="failed"], #status[data-state="device-lost"] { color: #ffb4a2; }
   #status-restart { margin-top: 8px; }
@@ -40,7 +40,7 @@
   [hidden] { display: none !important; }
   @media (max-width: 650px) {
     #hud { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); }
-    #panel { min-height: 0; max-height: 100%; }
+    #panel { min-height: 0; max-height: 100%; align-self: end; }
   }
   #panel > summary {
     cursor: pointer;
@@ -72,6 +72,7 @@
     background: #16233c; color: inherit;
   }
   button:hover { background: #1d2d4c; }
+  button:disabled { opacity: 0.45; cursor: default; }
   button[aria-pressed="true"] { background: #2b6cb0; border-color: #4a90d9; }
   .presets button { flex: 1; }
   textarea {
@@ -88,11 +89,11 @@
 <body>
 
 <canvas id="canvas" width="1280" height="720" tabindex="0" aria-label="Ripple boat. Click or tap water behind the boat to push it away."></canvas>
-<div id="hud"><div id="status-region"><p id="status" role="status" aria-live="polite" data-state="loading" data-frames="0">Loading the ocean…</p><p class="hint" id="game-instructions">The motor is broken. Tap behind the boat to push it, beside it to turn, ahead to slow down.</p>
+<div id="hud"><div id="status-region"><p id="status" role="status" aria-live="polite" data-state="loading" data-frames="0">Loading the ocean…</p><p class="hint" id="game-instructions">Guide the broken boat around the rock. Arrive slowly in the green dock. Tap behind to push, beside to turn, ahead to slow down.</p>
 <p id="game-status" role="status" aria-live="polite">Preparing the boat…</p>
 <div class="btns" id="game-controls">
 <button type="button" id="game-pause" aria-pressed="false">Pause</button>
-<button type="button" id="game-reset">Reset boat</button>
+<button type="button" id="game-reset">Retry</button>
 <button type="button" id="mode" aria-pressed="true">Boat mode</button>
 </div><button id="status-restart" type="button" hidden>Restart</button></div>
 

@@ -195,7 +195,7 @@ rhi::FrameStatus OceanScene::RenderFrame(const platform::browser::WindowState& i
     const uint32 frameW = info.Width > 0 ? info.Width : width;
     const uint32 frameH = info.Height > 0 ? info.Height : height;
     uniforms = buildUniforms(frameW, frameH);
-    mCamera = game::FitCamera(frameW, frameH);
+    mCamera = game::FitCamera(frameW, frameH, mGame.GetLevel().HalfExtent);
     if (rhi::UpdateUniform(mUniform, uploadBytes()) != rhi::ResourceStatus::Ready ||
         rhi::DrawFullscreen(mPipeline) != rhi::ResourceStatus::Ready)
     {

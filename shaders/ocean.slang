@@ -7,7 +7,7 @@
 // fullscreen-rendering-handoff.md).
 //
 // The CPU mirror of this layout is src/ocean/ocean_uniforms.h; the two must
-// agree (offsets asserted on the C++ side). set/group 0, binding 0, 432 bytes.
+// agree (offsets asserted on the C++ side). set/group 0, binding 0, 736 bytes.
 
 struct OceanUniforms
 {
@@ -50,6 +50,25 @@ struct OceanUniforms
     float4 ripple13; // origin.xy, radius, fade
     float4 ripple14; // origin.xy, radius, fade
     float4 ripple15; // origin.xy, radius, fade
+    float4 levelBounds; // half width/height, reserved
+    float4 dockInfo; // center.xy, radius, arrival speed
+    float4 levelInfo; // rock count, phase, dock progress, boundary hazard
+    float4 rock0; // center.xy, radius, reserved
+    float4 rock1; // center.xy, radius, reserved
+    float4 rock2; // center.xy, radius, reserved
+    float4 rock3; // center.xy, radius, reserved
+    float4 rock4; // center.xy, radius, reserved
+    float4 rock5; // center.xy, radius, reserved
+    float4 rock6; // center.xy, radius, reserved
+    float4 rock7; // center.xy, radius, reserved
+    float4 rock8; // center.xy, radius, reserved
+    float4 rock9; // center.xy, radius, reserved
+    float4 rock10; // center.xy, radius, reserved
+    float4 rock11; // center.xy, radius, reserved
+    float4 rock12; // center.xy, radius, reserved
+    float4 rock13; // center.xy, radius, reserved
+    float4 rock14; // center.xy, radius, reserved
+    float4 rock15; // center.xy, radius, reserved
 
 };
 
@@ -75,6 +94,29 @@ float4 rippleAt(int index)
         case 13: return ocean.ripple13;
         case 14: return ocean.ripple14;
         default: return ocean.ripple15;
+    }
+}
+
+float4 rockAt(int index)
+{
+    switch (index)
+    {
+        case 0: return ocean.rock0;
+        case 1: return ocean.rock1;
+        case 2: return ocean.rock2;
+        case 3: return ocean.rock3;
+        case 4: return ocean.rock4;
+        case 5: return ocean.rock5;
+        case 6: return ocean.rock6;
+        case 7: return ocean.rock7;
+        case 8: return ocean.rock8;
+        case 9: return ocean.rock9;
+        case 10: return ocean.rock10;
+        case 11: return ocean.rock11;
+        case 12: return ocean.rock12;
+        case 13: return ocean.rock13;
+        case 14: return ocean.rock14;
+        default: return ocean.rock15;
     }
 }
 
@@ -207,11 +249,26 @@ float4 fragmentMain(float4 position : SV_Position) : SV_Target0
 
     if (ocean.gameInfo.x > 0.5)
     {
-        // A light boundary marks the placement region. It is not yet a hazard.
-        float edge = min(abs(abs(world.x) - 30.0), abs(abs(world.y) - 40.0));
-        float inBounds = step(abs(world.x), 30.25) * step(abs(world.y), 40.25);
-        float boundary = (1.0 - smoothstep(0.06, 0.18, edge)) * inBounds * 0.25;
-        color = lerp(color, float3(0.40, 0.75, 0.77), boundary);
+        float2 extent = ocean.levelBounds.xy;
+        float outside = step(extent.x, abs(world.x)) + step(extent.y, abs(world.y));
+        color = lerp(color, float3(0.025, 0.045, 0.075), saturate(outside) * 0.75);
+        float edge = min(abs(abs(world.x) - extent.x), abs(abs(world.y) - extent.y));
+        float inBounds = step(abs(world.x), extent.x + 0.25) * step(abs(world.y), extent.y + 0.25);
+        float boundary = (1.0 - smoothstep(0.06, 0.18, edge)) * inBounds;
+        float3 boundaryColor = lerp(float3(0.40, 0.75, 0.77), float3(0.95, 0.64, 0.38), ocean.levelInfo.w);
+        color = lerp(color, boundaryColor, boundary * 0.7);
+        if (ocean.dockInfo.z > 0.0)
+        {
+            float distance = length(world - ocean.dockInfo.xy);
+            float zone = 1.0 - smoothstep(ocean.dockInfo.z - 0.1, ocean.dockInfo.z + 0.1, distance);
+            float dockEdge = 1.0 - smoothstep(0.10, 0.25, abs(distance - ocean.dockInfo.z));
+            float3 dockColor = lerp(float3(0.28, 0.89, 0.69), float3(0.85, 1.0, 0.72), ocean.levelInfo.z);
+            color = lerp(color, dockColor, zone * 0.13 + dockEdge * 0.8);
+            // A small anchor cross makes the destination readable before arrival.
+            float cross = (1.0 - smoothstep(0.08, 0.16, min(abs(world.x - ocean.dockInfo.x), abs(world.y - ocean.dockInfo.y)))) *
+                          (1.0 - smoothstep(0.65, 0.8, distance));
+            color = lerp(color, dockColor, cross * 0.85);
+        }
         for (int i = 0; i < 16; ++i)
         {
             if (float(i) >= ocean.gameInfo.y) break;
@@ -223,6 +280,21 @@ float4 fragmentMain(float4 position : SV_Position) : SV_Target0
             color = lerp(color, float3(0.76, 0.96, 0.95), (outline + trail) * ring.w * 0.85);
             float origin = (1.0 - smoothstep(0.15, 0.45, distance)) * ring.w;
             color = lerp(color, float3(0.90, 0.98, 0.91), origin);
+        }
+        for (int i = 0; i < 16; ++i)
+        {
+            if (float(i) >= ocean.levelInfo.x) break;
+            float4 rock = rockAt(i);
+            float2 p = world - rock.xy;
+            float distance = length(p);
+            float edgeWidth = max(0.04, metersPerPixel);
+            float shape = 1.0 - smoothstep(rock.z - edgeWidth * 0.5, rock.z + edgeWidth * 0.5, distance);
+            float foamEdge = 1.0 - smoothstep(0.08, 0.32, abs(distance - rock.z - 0.18));
+            color = lerp(color, float3(0.67, 0.88, 0.86), foamEdge * 0.5);
+            float grain = valueNoise(p * 0.9 + float2(12.3, 5.7));
+            float lighting = saturate(0.65 + dot(p / rock.z, float2(-0.15, 0.25)));
+            float3 stone = lerp(float3(0.18, 0.23, 0.27), float3(0.54, 0.57, 0.52), lighting + grain * 0.15);
+            color = lerp(color, stone, shape);
         }
         float2 relative = world - ocean.boatInfo.xy;
         float ca = cos(ocean.boatInfo.z), sa = sin(ocean.boatInfo.z);
@@ -238,6 +310,14 @@ float4 fragmentMain(float4 position : SV_Position) : SV_Target0
                       (1.0 - smoothstep(0.22, 0.3, abs(boat.y)));
         hullColor = lerp(hullColor, float3(0.93, 0.90, 0.77), cabin);
         hullColor = lerp(hullColor, float3(1.0, 0.96, 0.70), ocean.gameInfo.w * 0.5);
+        if (ocean.levelInfo.y > 0.5 && ocean.levelInfo.y < 1.5)
+            hullColor = lerp(hullColor, float3(0.95, 0.25, 0.18), 0.7);
+        if (ocean.levelInfo.y > 1.5)
+            hullColor = lerp(hullColor, float3(0.38, 0.97, 0.66), 0.55);
+        // The circular hull outline is the exact collision envelope; the
+        // illustrated boat inside it is decorative and can change heading.
+        float hullEdge = (1.0 - smoothstep(0.04, 0.12, abs(length(relative) - radius))) * 0.5;
+        color = lerp(color, float3(0.97, 0.85, 0.57), hullEdge);
         color = lerp(color, hullColor, hull);
     }
     return float4(color, 1.0);

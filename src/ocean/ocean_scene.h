@@ -46,7 +46,10 @@ class OceanScene final
 public:
     // The store is borrowed and must outlive the scene; it is the single bridge
     // between UI/config and the GPU-free settings. The scene never mutates it.
-    explicit OceanScene(const ocean::SettingsStore& store) noexcept : mStore(&store) {}
+    explicit OceanScene(const ocean::SettingsStore& store) noexcept : mStore(&store)
+    {
+        (void)mGame.LoadLevel(game::RescueLevel());
+    }
 
     bool Start(rhi::BackendSelection selection = rhi::BackendSelection::Auto) noexcept;
     SceneState Tick() noexcept; // advance + render one frame
