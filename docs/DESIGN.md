@@ -46,7 +46,7 @@ or an installed SDK (`tests/ocean_tests.cpp`).
 * **World space** is a 2D plane measured in **meters**. `+X` is right (east),
   `+Y` is up on screen (north). The camera is orthographic and looks straight
   down; there is no perspective and no horizon.
-* The viewport always shows a **fixed vertical extent** of the world,
+* The viewport always shows a **fixed vertical extent in ocean tuning mode** of the world,
   `kWorldViewHeightMeters = 100 m`, regardless of window size or aspect ratio.
   The horizontal extent is derived from the aspect ratio
   (`WorldViewWidthMeters = 100 m × width/height`). This keeps **one world meter
@@ -104,11 +104,21 @@ Robustness rules (all in `SceneClock::Advance`, all unit-tested):
 
 `OceanUniforms` (CPU, `src/ocean/ocean_uniforms.h`) mirrors the `OceanUniforms`
 constant buffer in `shaders/ocean.slang`. It is **set/group 0, binding 0**,
-visible to both stages, **144 bytes** (within the engine's 16..4096, multiple of
+visible to both stages, **432 bytes** (within the engine's 16..4096, multiple of
 16 bound). The field offsets were taken from the Slang std140 reflection and are
 `static_assert`-checked, so a CPU/GPU layout drift is a compile error. Per the
 engine guidance, CPU layout is the application's contract: we read the per-target
 reflection and assert `offsetof`/`sizeof`/`alignof` rather than assume packing.
+
+The original ocean fields occupy bytes 0–143. Boat state begins at 144, game
+state at 160, and sixteen 16-byte ripple records at 176. Slang uses individually
+named `ripple0` through `ripple15` fields to satisfy the engine's current WebGL 2
+reflection subset; the contiguous CPU array has the same offsets and stride.
+
+In boat mode, the camera fits a 60 × 80 m placement area with a 5 m margin:
+`viewHeight = max(90, 70 / aspect)` and `viewWidth = viewHeight * aspect`.
+Screen mapping uses that fitted extent on both CPU and GPU. See the
+[implementation record](RIPPLE_GAME_IMPLEMENTATION.md) for gameplay timing.
 
 ## Palette
 

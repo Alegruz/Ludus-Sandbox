@@ -102,12 +102,15 @@ def main():
     files['licenses/SPIRV-Cross.txt'] = (engine / 'out/shader-tools/spirv-cross/LICENSE').read_bytes()
     files['NOTICE.txt'] = b'Drift ocean playground. Ludus: MIT. Runtime and build-tool notices are in licenses/. SPIRV-Cross is a build-time tool and is not shipped. Payload identity and tool pins are in build-info.json.\n'
     manifest = json.loads((build / 'ludus-shaders/LudusSandbox/ocean/manifest.json').read_text())
-    if manifest['uniform_sizes'] != {'vertex': 144, 'fragment': 144, 'wgsl': 144, 'glsl_es': 144}:
+    if manifest['uniform_sizes'] != {'vertex': 432, 'fragment': 432, 'wgsl': 432, 'glsl_es': 432}:
         raise ValueError('Ocean upload layout is not valid across all backends')
     manifest.pop('commands', None)
     revision = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=engine, text=True).strip()
-    info = {'preset': 'web-emscripten-release', 'engine_revision': revision,
-        'engine_dirty': bool(subprocess.check_output(['git', 'status', '--porcelain', '--untracked-files=no'], cwd=engine)),
+    package_dir = Path(next(line.split('=', 1)[1] for line in cache.splitlines() if line.startswith('Ludus_DIR:PATH=')))
+    sdk_manifest = json.loads((package_dir.parents[2] / 'share/Ludus/LudusSdkManifest.json').read_text())
+    info = {'preset': 'web-emscripten-release', 'engine_revision': sdk_manifest['source_revision'],
+        'engine_sdk': sdk_manifest, 'tooling_source_revision': revision,
+        'tooling_source_dirty': bool(subprocess.check_output(['git', 'status', '--porcelain', '--untracked-files=no'], cwd=engine)),
         'memory': {'initial_bytes': 33554432, 'maximum_bytes': 268435456, 'stack_bytes': 65536, 'growth': True, 'threads': False},
         'debug_symbols': False, 'shader': manifest,
         'toolchains': {name: json.loads((engine / ('config/' + name + '.json')).read_text()) for name in ('web_toolchain', 'shader_toolchain', 'spirv_cross_toolchain')},

@@ -27,6 +27,8 @@
 #include <string>
 
 using ludus::foundation::float32;
+using ludus::foundation::float64;
+using ludus::foundation::uint32;
 
 namespace
 {
@@ -47,7 +49,7 @@ EM_JS(void, PresentState, (int state, int error, unsigned frames, int backend, i
     const messages = [
         'Stopped. Select Restart to play.',
         'Loading the ocean\u2026',
-        'Drifting. Adjust the controls to shape the sea.',
+        'Drift is ready.',
         'The ocean could not start. Try Restart.',
         'Graphics connection lost. Select Restart to try again.'];
     let message = messages[state] || "";
@@ -62,6 +64,9 @@ EM_JS(void, PresentState, (int state, int error, unsigned frames, int backend, i
     status.dataset.webgpuError = webgpuError;
     status.dataset.webglError = webglError;
     document.getElementById('panel').hidden = state !== 2;
+    document.getElementById('game-controls').hidden = state !== 2;
+    document.getElementById('game-status').hidden = state !== 2;
+    document.getElementById('game-instructions').hidden = state !== 2;
     document.getElementById('status-restart').hidden = state === 1 || state === 2;
     if (globalThis.__oceanOnState) globalThis.__oceanOnState(state, error, frames);
 });
@@ -76,6 +81,23 @@ EM_JS(int, ReadBackendSelection, (), {
 EM_JS(void, PublishSettings, (const char* json), {
     const text = UTF8ToString(json);
     if (globalThis.__oceanOnSettings) globalThis.__oceanOnSettings(text);
+});
+EM_JS(void, PresentGame, (float64 x, float64 y, uint32 placements, uint32 contacts, uint32 ticks,
+                         uint32 rings, uint32 result, float64 cooldown, int paused, int enabled), {
+    const hud = document.getElementById('game-status');
+    if (!hud) return;
+    Object.assign(hud.dataset, {x, y, placements, contacts, ticks, rings, result, cooldown,
+                               paused: String(!!paused), enabled: String(!!enabled)});
+    const feedback = ['Click or tap water to send a ripple.', 'Ripple queued.', 'Ripple sent.',
+                      'Ripple recharging...', 'Too many ripples. Wait a moment.',
+                      'Place ripples inside the marked water.', 'Resume to place a ripple.'];
+    const message = !enabled ? 'Ocean tuning mode.' : paused ? 'Paused.' :
+                    cooldown > 0 ? 'Ripple recharging...' : feedback[result] || feedback[0];
+    if (hud.textContent !== message) hud.textContent = message;
+    const button = document.getElementById('game-pause');
+    button.textContent = paused ? 'Resume' : 'Pause';
+    button.setAttribute('aria-pressed', String(!!paused));
+    document.getElementById('mode').setAttribute('aria-pressed', String(!!enabled));
 });
 // clang-format on
 
@@ -100,6 +122,18 @@ void Frame() noexcept
 {
     (void)gScene.Tick();
     PresentSceneState();
+    const auto& game = gScene.GetGame();
+    const auto& boat = game.GetBoat();
+    PresentGame(boat.Position.X,
+                boat.Position.Y,
+                static_cast<uint32>(game.Placements()),
+                static_cast<uint32>(game.Contacts()),
+                static_cast<uint32>(game.Ticks()),
+                game.ActiveRipples(),
+                static_cast<uint32>(game.LastPlacement()),
+                game.CooldownFraction(),
+                gScene.IsPaused() ? 1 : 0,
+                gScene.GameEnabled() ? 1 : 0);
 }
 } // namespace
 
@@ -133,6 +167,23 @@ EMSCRIPTEN_KEEPALIVE void OceanSetVisible(int visible) noexcept
 EMSCRIPTEN_KEEPALIVE void OceanResetSimulation() noexcept
 {
     gScene.ResetSimulation();
+}
+
+EMSCRIPTEN_KEEPALIVE int DriftPlace(float64 x, float64 y) noexcept
+{
+    return static_cast<int>(gScene.PlaceRipple(x, y));
+}
+EMSCRIPTEN_KEEPALIVE void DriftSetEnabled(int enabled) noexcept
+{
+    gScene.SetGameEnabled(enabled != 0);
+}
+EMSCRIPTEN_KEEPALIVE void DriftSetFocused(int focused) noexcept
+{
+    gScene.SetFocused(focused != 0);
+}
+EMSCRIPTEN_KEEPALIVE void DriftCancelInput() noexcept
+{
+    gScene.CancelGameInput();
 }
 
 // Scalar controls.

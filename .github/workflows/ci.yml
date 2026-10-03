@@ -52,11 +52,16 @@ jobs:
             src/ocean/ocean_settings.cpp src/ocean/ocean_clock.cpp src/ocean/ocean_uniforms.cpp \
             -o ocean_tests
           ./ocean_tests
+          clang++-18 -std=c++23 -Wall -Wextra -Wpedantic -Werror -fno-exceptions -I src \
+            tests/ripple_tests.cpp src/game/ripple_game.cpp src/game/game_render.cpp \
+            src/ocean/ocean_settings.cpp src/ocean/ocean_uniforms.cpp -o ripple_tests
+          ./ripple_tests
 
       - name: Static analysis (clang-tidy) on the GPU-free ocean sources
         run: |
           clang-tidy-18 \
             src/ocean/ocean_settings.cpp src/ocean/ocean_clock.cpp src/ocean/ocean_uniforms.cpp \
+            src/game/ripple_game.cpp src/game/game_render.cpp \
             --warnings-as-errors='*' \
             -- -std=c++23 -I src
 
@@ -166,12 +171,16 @@ jobs:
           npx playwright install --with-deps chromium
       - name: Verify ocean pixels and fallback in the exact ZIP
         working-directory: tools/browser-tests
-        run: npm test
+        run: |
+          npm test
+          npm run test:game -- ../../out/browser-qa/extracted ../../out/browser-qa/ripple-results
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: drift-ocean-browser-evidence
-          path: out/browser-qa/results
+          path: |
+            out/browser-qa/results/
+            out/browser-qa/ripple-results/
           if-no-files-found: warn
       - uses: actions/upload-artifact@v4
         with:

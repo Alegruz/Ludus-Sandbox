@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Drift — Ludus ocean playground</title>
+<title>Drift — ripple boat</title>
 <style>
   * { box-sizing: border-box; }
   html, body { height: 100%; margin: 0; }
@@ -22,6 +22,7 @@
     display: block;
     background: #071022;
     touch-action: none;
+    cursor: crosshair;
   }
   #canvas:focus-visible { outline: 3px solid #ffd27d; outline-offset: -3px; }
 
@@ -29,7 +30,7 @@
   #hud { position: fixed; inset: 10px; pointer-events: none; display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 320px); gap: 12px; align-items: start; }
   #status-region { pointer-events: auto; background: rgba(7,16,34,.86); border-radius: 12px;
-    padding: 10px 14px; max-width: 540px; }
+    padding: 10px 14px; max-width: 390px; }
   #status { margin: 0; overflow-wrap: anywhere; }
   #status[data-state="failed"], #status[data-state="device-lost"] { color: #ffb4a2; }
   #status-restart { margin-top: 8px; }
@@ -38,8 +39,8 @@
     border: 1px solid rgba(255,255,255,.12); border-radius: 12px; padding: 0; }
   [hidden] { display: none !important; }
   @media (max-width: 650px) {
-    #hud { grid-template-columns: 1fr; align-content: start; }
-    #panel { max-height: calc(100vh - 130px); }
+    #hud { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); }
+    #panel { min-height: 0; max-height: 100%; }
   }
   #panel > summary {
     cursor: pointer;
@@ -86,8 +87,14 @@
 </head>
 <body>
 
-<canvas id="canvas" width="1280" height="720" tabindex="0" aria-label="Ocean scene. Click to focus; the tuning panel is to the right."></canvas>
-<div id="hud"><div id="status-region"><p id="status" role="status" aria-live="polite" data-state="loading" data-frames="0">Loading the ocean…</p><button id="status-restart" type="button" hidden>Restart</button></div>
+<canvas id="canvas" width="1280" height="720" tabindex="0" aria-label="Ripple boat. Click or tap water behind the boat to push it away."></canvas>
+<div id="hud"><div id="status-region"><p id="status" role="status" aria-live="polite" data-state="loading" data-frames="0">Loading the ocean…</p><p class="hint" id="game-instructions">The motor is broken. Tap behind the boat to push it, beside it to turn, ahead to slow down.</p>
+<p id="game-status" role="status" aria-live="polite">Preparing the boat…</p>
+<div class="btns" id="game-controls">
+<button type="button" id="game-pause" aria-pressed="false">Pause</button>
+<button type="button" id="game-reset">Reset boat</button>
+<button type="button" id="mode" aria-pressed="true">Boat mode</button>
+</div><button id="status-restart" type="button" hidden>Restart</button></div>
 
 <details id="panel" hidden>
   <summary aria-label="Ocean tuning panel">Drift — ocean controls</summary>
@@ -175,10 +182,32 @@ const call = (name, ...args) => { try { return Module['_' + name]?.(...args); } 
 // pointer/keydown inside the panel is kept there (stopPropagation) so it never
 // leaks to the canvas/scene.
 const panel = byId('panel');
+byId('status-region').addEventListener('pointerdown', () => call('DriftCancelInput'));
+panel.addEventListener('pointerdown', () => call('DriftCancelInput'));
 ['pointerdown', 'keydown', 'wheel'].forEach((type) =>
   panel.addEventListener(type, (e) => e.stopPropagation(), { passive: true }));
-const canvas = byId('canvas');
-canvas.addEventListener('pointerdown', () => canvas.focus());
+// Primary Pointer Events are the sole placement source: no click/touchstart
+// listener exists that could duplicate synthetic mouse events on mobile.
+// Backend selection/restart may replace the canvas. Delegate to the current
+// element so both fallback and repeated graphics restarts retain game input.
+document.addEventListener('pointerdown', (event) => {
+  const canvas = byId('canvas');
+  if (event.target !== canvas) return;
+  if (!event.isPrimary || event.button !== 0) return;
+  event.preventDefault();
+  canvas.focus({preventScroll: true});
+  const rect = canvas.getBoundingClientRect();
+  if (rect.width <= 0 || rect.height <= 0) return;
+  call('DriftPlace', (event.clientX - rect.left) / rect.width, (event.clientY - rect.top) / rect.height);
+}, {passive: false});
+document.addEventListener('pointercancel', (event) => {
+  if (event.target === byId('canvas')) call('DriftCancelInput');
+});
+window.addEventListener('blur', () => call('DriftSetFocused', 0));
+window.addEventListener('focus', () => call('DriftSetFocused', 1));
+byId('game-pause').addEventListener('click', () => call('OceanSetPaused', call('OceanIsPaused') ? 0 : 1));
+byId('game-reset').addEventListener('click', () => call('OceanResetSimulation'));
+byId('mode').addEventListener('click', () => call('DriftSetEnabled', byId('mode').getAttribute('aria-pressed') === 'true' ? 0 : 1));
 
 // --- Sliders ---------------------------------------------------------------
 function wireSlider(id, outId, fn, digits) {

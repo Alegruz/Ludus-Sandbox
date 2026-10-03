@@ -1,0 +1,83 @@
+{
+  "kind": "Real software GPU, emulated touch; physical devices unverified",
+  "cases": [
+    {
+      "name": "webgpu-mouse",
+      "status": "passed",
+      "push": {
+        "x": "0.4253633645050787",
+        "y": "0",
+        "placements": "1",
+        "contacts": "1",
+        "ticks": "29",
+        "rings": "1",
+        "result": "0",
+        "cooldown": "0",
+        "paused": "true",
+        "enabled": "true"
+      },
+      "errors": []
+    },
+    {
+      "name": "webgpu-touch",
+      "status": "passed",
+      "push": {
+        "x": "0.2901384952653111",
+        "y": "0",
+        "placements": "1",
+        "contacts": "1",
+        "ticks": "25",
+        "rings": "1",
+        "result": "0",
+        "cooldown": "0",
+        "paused": "true",
+        "enabled": "true"
+      },
+      "errors": []
+    },
+    {
+      "name": "webgl2-mouse",
+      "status": "passed",
+      "push": {
+        "x": "0.2553347143239255",
+        "y": "0",
+        "placements": "1",
+        "contacts": "1",
+        "ticks": "29",
+        "rings": "1",
+        "result": "2",
+        "cooldown": "0.06666666666666667",
+        "paused": "true",
+        "enabled": "true"
+      },
+      "errors": []
+    },
+    {
+      "name": "webgl2-touch",
+      "status": "passed",
+      "push": {
+        "x": "0.11198712362401499",
+        "y": "0",
+        "placements": "1",
+        "contacts": "1",
+        "ticks": "20",
+        "rings": "1",
+        "result": "2",
+        "cooldown": "0.3333333333333333",
+        "paused": "true",
+        "enabled": "true"
+      },
+      "errors": []
+    }
+  ],
+  "args": [
+    "--enable-unsafe-webgpu",
+    "--enable-features=Vulkan",
+    "--use-webgpu-adapter=swiftshader",
+    "--use-angle=swiftshader",
+    "--use-vulkan=swiftshader",
+    "--disable-vulkan-surface",
+    "--enable-unsafe-swiftshader"
+  ],
+  "browserVersion": "140.0.7339.186"
+}

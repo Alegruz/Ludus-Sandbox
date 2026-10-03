@@ -3,7 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node run.mjs"
+    "test": "node run.mjs",
+    "test:game": "node ripple.mjs"
   },
   "devDependencies": {
     "playwright": "1.55.1",
