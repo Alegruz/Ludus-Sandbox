@@ -92,7 +92,7 @@ EM_JS(void, PresentGame, (float64 x, float64 y, uint32 placements, uint32 contac
                                phase: ['playing', 'crashed', 'arrived'][phase]});
     const feedback = ['Click or tap water to send a ripple.', 'Ripple queued.', 'Ripple sent.',
                       'Ripple recharging...', 'Too many ripples. Wait a moment.',
-                      'Place ripples inside the marked water.', 'Resume to place a ripple.'];
+                      'Tap clear water, away from rocks.', 'Resume to place a ripple.'];
     const message = !enabled ? 'Ocean tuning mode.' : phase === 1 ?
                     (crash === 1 ? 'Crashed into a rock. Retry to rescue the boat.' : 'Reached the water boundary. Retry to rescue the boat.') :
                     phase === 2 ? 'Boat rescued! Retry to sail the course again.' : paused ? 'Paused.' :

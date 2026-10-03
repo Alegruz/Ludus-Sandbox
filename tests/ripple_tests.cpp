@@ -284,6 +284,37 @@ void TestLevelValidation() noexcept
     CHECK(game.Placements() == 1);
 }
 
+void TestRockOrigins() noexcept
+{
+    RippleGame game;
+    auto level = RescueLevel();
+    CHECK(game.LoadLevel(level));
+    CHECK(game.Place({0.0, 0.0}) == PlacementResult::Outside);
+    CHECK(game.Place({5.0, 0.0}) == PlacementResult::Outside);
+    CHECK(game.Place({4.99, 0.0}) == PlacementResult::Outside);
+    game.Tick();
+    CHECK(game.Placements() == 0 && game.ActiveRipples() == 0);
+    CHECK(Near(game.CooldownFraction(), 0.0));
+    CHECK(game.Place({5.01, 0.0}) == PlacementResult::Queued);
+    CHECK(game.Place({0.0, 0.0}) == PlacementResult::Outside);
+    game.Tick();
+    CHECK(game.Placements() == 1 && game.ActiveRipples() == 1);
+    CHECK(game.CooldownFraction() > 0.0); // Rejection preserved valid queued input.
+    CHECK(Near(game.GetRipples()[0].Origin.X, 5.01));
+
+    level.RockCount = 2;
+    level.Rocks[1] = {.Center = {12.0, 0.0}, .Radius = 1.0, .Id = 2};
+    CHECK(game.LoadLevel(level));
+    CHECK(game.Place({12.0, 0.0}) == PlacementResult::Outside);
+    CHECK(game.Place({11.0, 0.0}) == PlacementResult::Outside);
+    game.Tick();
+    CHECK(game.Placements() == 0 && game.ActiveRipples() == 0);
+    CHECK(Near(game.CooldownFraction(), 0.0));
+    CHECK(game.Place({10.99, 0.0}) == PlacementResult::Queued);
+    game.Tick();
+    CHECK(game.Placements() == 1);
+}
+
 void TestSweptHazardsAndRetry() noexcept
 {
     float64 time = -1.0;
@@ -311,7 +342,7 @@ void TestSweptHazardsAndRetry() noexcept
     level.RockCount = 1;
     level.Rocks[0] = {.Center = {0.0, 0.0}, .Radius = 1.0, .Id = 1};
     CHECK(game.LoadLevel(level));
-    (void)game.Place({-0.4, 0.0}); // This band would touch AFTER the crash.
+    (void)game.Place({1.1, 0.0}); // This band would touch AFTER the crash.
     game.Advance(0.1, true);
     CHECK(game.Phase() == GamePhase::Crashed);
     CHECK(game.Crash() == CrashReason::Rock);
@@ -445,6 +476,7 @@ int main()
     TestCameraAndSnapshot();
     TestPhysicalCurrentAndTuning();
     TestLevelValidation();
+    TestRockOrigins();
     TestSweptHazardsAndRetry();
     TestDocking();
     std::printf("Ripple game: %d checks, %d failures\n", gChecks, gFailures);

@@ -23,7 +23,7 @@ const server = createServer(async (request, response) => {
 });
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 const base = `http://127.0.0.1:${server.address().port}`;
-const report = {kind: 'Real software GPU, emulated touch; physical devices unverified', cases: [],
+const report = {kind: 'Real software GPU, emulated touch; physical devices unverified', deviceScaleFactor: 1, rafDelayMs: 50, cases: [],
   args: ['--enable-unsafe-webgpu', '--enable-features=Vulkan', '--use-webgpu-adapter=swiftshader',
     '--use-angle=swiftshader', '--use-vulkan=swiftshader', '--disable-vulkan-surface', '--enable-unsafe-swiftshader']};
 let browser;
@@ -43,7 +43,9 @@ try {
   for (const backend of ['webgpu', 'webgl2']) {
     for (const mobile of [false, true]) {
       const viewport = mobile ? {width: 390, height: 844} : {width: 960, height: 540};
-      const context = await browser.newContext({viewport, hasTouch: mobile, deviceScaleFactor: mobile ? 2 : 1});
+      // The ocean suite separately verifies DPR 2. Keep long navigation at DPR
+      // 1 so software rasterization does not dominate the simulation timeout.
+      const context = await browser.newContext({viewport, hasTouch: mobile, deviceScaleFactor: 1});
       // Bound expensive software-GPU work. No interactive timing claim is made.
       await context.addInitScript(() => {
         const raf = requestAnimationFrame;
@@ -139,6 +141,12 @@ try {
         const py = size.height / 2 - worldY * size.height / height;
         if (mobile) await page.touchscreen.tap(px, py); else await page.mouse.click(px, py);
       };
+      await placeWorld(0, 0);
+      await until(() => state(page), s => Number(s.result) === 5, 'solid rock rejects ripple origin');
+      const rejected = await state(page);
+      assert.equal(Number(rejected.placements), 0);
+      assert.equal(Number(rejected.rings), 0);
+      assert.equal(Number(rejected.cooldown), 0, 'Rock placement consumed cooldown');
       const steer = async (waypoints, terminal, timeout = 180000) => {
         let waypoint = 0;
         const deadline = Date.now() + timeout;

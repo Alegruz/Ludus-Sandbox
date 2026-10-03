@@ -9,7 +9,8 @@ dock, or crash and Retry. Three-level progression remains M3.
 Build and serve the browser Release payload as described in [BUILD.md](BUILD.md).
 Place ripples behind the boat to accelerate, beside it to turn, and ahead to
 slow down. The pale circle around the boat shows its physical hull. Avoid the
-rock and orange water boundary. The entire hull must stay in the green dock at
+rock and orange water boundary. Ripple origins on or inside a rock are rejected
+without consuming cooldown or clearing valid queued input. The entire hull must stay in the green dock at
 no more than 1.5 m/s for 24 ticks (0.4 seconds).
 
 Crash and arrival freeze gameplay and reject placements. Retry resets the
@@ -64,7 +65,7 @@ for a physical-device playtest:
 
 - Native and browser Development/Release configure/build through selectable
   presets, real SDK linkage, Slang reflection, and SPIR-V validation.
-- Ocean, independent gameplay reference, and real SDK gameplay CTests; 437
+- Ocean, independent gameplay reference, and real SDK gameplay CTests; 455
   gameplay checks cover swept/tangent contact, collision timing, terminal
   freezing, transactional level loading, docking, and 30 crash/Retry cycles.
 - ASan/UBSan with leak detection, pinned Clang 18 formatting/static analysis,
@@ -74,7 +75,8 @@ for a physical-device playtest:
   WebGPU and WebGL 2, tested against the extracted Release ZIP.
 - Native Vulkan resource creation and 120 rendered frames on Intel UHD 620.
 
-Browser automation uses SwiftShader and throttled RAF. It establishes rendered
+Browser automation uses SwiftShader and throttled RAF. Long navigation runs at
+DPR 1; the separate ocean suite retains DPR 2 layout/render coverage. It establishes rendered
 behavior, not hardware performance or physical touch support. Native pointer
 input is still not connected by the public platform API used by this app;
 the browser is the interactive target. Fresh-player steering, physical mobile

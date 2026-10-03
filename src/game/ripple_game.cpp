@@ -24,6 +24,22 @@ constexpr float64 kContactBand = kBoatRadius + kRingHalfWidth;
 {
     return std::isfinite(p.X) && std::isfinite(p.Y) && std::abs(p.X) <= halfExtent.X && std::abs(p.Y) <= halfExtent.Y;
 }
+[[nodiscard]] bool ClearWater(Point p, const LevelDefinition& level) noexcept
+{
+    if (!InWater(p, level.HalfExtent))
+    {
+        return false;
+    }
+    for (usize i = 0; i < level.RockCount; ++i)
+    {
+        const auto& rock = level.Rocks[i];
+        if (Length({p.X - rock.Center.X, p.Y - rock.Center.Y}) <= rock.Radius)
+        {
+            return false;
+        }
+    }
+    return true;
+}
 [[nodiscard]] bool CircleInside(Point center, float64 radius, Point halfExtent) noexcept
 {
     return InWater(center, halfExtent) && std::abs(center.X) + radius < halfExtent.X &&
@@ -275,7 +291,7 @@ PlacementResult RippleGame::Place(Point world) noexcept
     {
         mLastPlacement = PlacementResult::Inactive;
     }
-    else if (!InWater(world, mLevel.HalfExtent))
+    else if (!ClearWater(world, mLevel))
     {
         mLastPlacement = PlacementResult::Outside;
     }

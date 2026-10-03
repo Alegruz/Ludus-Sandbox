@@ -32,7 +32,7 @@ not prerequisites for this fullscreen procedural slice.
 
 M0/M1 code and automated software-GPU acceptance now pass; see the
 [implementation record](RIPPLE_GAME_IMPLEMENTATION.md). Physical touch, physical
-GPU performance, native runtime and a fresh-player steering trial remain open.
+GPU performance, native interactive input and a fresh-player steering trial remain open.
 M2 now supplies the rock/dock/crash/retry loop; see [its implementation record](RIPPLE_GAME_M2.md). M3–M4 gameplay delivery is pending. The packaged M1 build exercises the existing
 release path; it does not complete M4's full-game acceptance.
 
