@@ -16,6 +16,7 @@
 #include "ocean/ocean_settings.h"
 #include "ocean/settings_store.h"
 
+#include <ludus/foundation/base/types.h>
 #include <ludus/foundation/logging/log.hpp>
 #include <ludus/foundation/logging/log_system.hpp>
 
@@ -24,6 +25,8 @@
 #include <cstdlib>
 #include <cstring>
 #include <string>
+
+using ludus::foundation::float32;
 
 namespace
 {
@@ -35,9 +38,9 @@ ludus::sandbox::OceanScene gScene(gStore);
 
 // Report scene state + frame count + current settings snapshot to the DOM so
 // the panel can reflect presets/imports and show loading / error / restart
-// state. States mirror SceneState. Error 3 == AdapterUnavailable (no WebGPU).
+// state. States mirror SceneState. Per-attempt errors remain available for diagnostics.
 // clang-format off
-EM_JS(void, PresentState, (int state, int error, unsigned frames), {
+EM_JS(void, PresentState, (int state, int error, unsigned frames, int backend, int webgpuError, int webglError), {
     const status = document.getElementById('status');
     if (!status) return;
     const names = ['stopped', 'loading', 'playing', 'failed', 'device-lost'];
@@ -47,15 +50,25 @@ EM_JS(void, PresentState, (int state, int error, unsigned frames), {
         'Drifting. Adjust the controls to shape the sea.',
         'The ocean could not start. Try Restart.',
         'Graphics connection lost. Select Restart to try again.'];
-    let message = messages[state] || '';
+    let message = messages[state] || "";
     if (state === 3 && error === 3) {
-        message = 'WebGPU is unavailable. Use a browser and GPU that support WebGPU, then Restart.';
+        message = 'Graphics are unavailable. Try Restart or enable browser hardware acceleration.';
     }
     if (status.textContent !== message) status.textContent = message;
     status.dataset.state = names[state] || 'unknown';
     status.dataset.frames = frames;
     status.dataset.error = error;
+    status.dataset.backend = ['vulkan', 'webgpu', 'webgl2'][backend] || 'unknown';
+    status.dataset.webgpuError = webgpuError;
+    status.dataset.webglError = webglError;
+    document.getElementById('panel').hidden = state !== 2;
+    document.getElementById('status-restart').hidden = state === 1 || state === 2;
     if (globalThis.__oceanOnState) globalThis.__oceanOnState(state, error, frames);
+});
+
+EM_JS(int, ReadBackendSelection, (), {
+    const value = new URLSearchParams(location.search).get('backend');
+    return value === 'webgpu' ? 1 : value === 'webgl2' ? 2 : 0;
 });
 
 // Pull the authoritative settings JSON into the DOM when it changes externally
@@ -72,10 +85,21 @@ void PublishSettingsSnapshot() noexcept
     PublishSettings(json.c_str());
 }
 
+void PresentSceneState() noexcept
+{
+    const auto state = gScene.GetState();
+    const auto startup = gScene.GetStartupInfo();
+    PresentState(static_cast<int>(state),
+                 static_cast<int>(gScene.GetError()),
+                 gScene.GetFrames(),
+                 static_cast<int>(startup.SelectedBackend),
+                 static_cast<int>(startup.WebGpu.Error),
+                 static_cast<int>(startup.WebGL2.Error));
+}
 void Frame() noexcept
 {
-    const auto state = gScene.Tick();
-    PresentState(static_cast<int>(state), static_cast<int>(gScene.GetError()), gScene.GetFrames());
+    (void)gScene.Tick();
+    PresentSceneState();
 }
 } // namespace
 
@@ -85,12 +109,14 @@ void Frame() noexcept
 extern "C" {
 EMSCRIPTEN_KEEPALIVE void OceanRestart() noexcept
 {
-    (void)gScene.Start();
+    (void)gScene.Start(static_cast<ludus::graphics::rhi::BackendSelection>(ReadBackendSelection()));
     PublishSettingsSnapshot();
+    PresentSceneState();
 }
 EMSCRIPTEN_KEEPALIVE void OceanStop() noexcept
 {
     gScene.Shutdown();
+    PresentSceneState();
 }
 EMSCRIPTEN_KEEPALIVE void OceanSetPaused(int paused) noexcept
 {
@@ -110,45 +136,45 @@ EMSCRIPTEN_KEEPALIVE void OceanResetSimulation() noexcept
 }
 
 // Scalar controls.
-EMSCRIPTEN_KEEPALIVE void OceanSetCurrentDirection(float v) noexcept
+EMSCRIPTEN_KEEPALIVE void OceanSetCurrentDirection(float32 v) noexcept
 {
     gStore.SetCurrentDirectionDegrees(v);
 }
-EMSCRIPTEN_KEEPALIVE void OceanSetCurrentSpeed(float v) noexcept
+EMSCRIPTEN_KEEPALIVE void OceanSetCurrentSpeed(float32 v) noexcept
 {
     gStore.SetCurrentSpeed(v);
 }
-EMSCRIPTEN_KEEPALIVE void OceanSetWaveScale(float v) noexcept
+EMSCRIPTEN_KEEPALIVE void OceanSetWaveScale(float32 v) noexcept
 {
     gStore.SetWaveScale(v);
 }
-EMSCRIPTEN_KEEPALIVE void OceanSetWaveAnimationSpeed(float v) noexcept
+EMSCRIPTEN_KEEPALIVE void OceanSetWaveAnimationSpeed(float32 v) noexcept
 {
     gStore.SetWaveAnimationSpeed(v);
 }
-EMSCRIPTEN_KEEPALIVE void OceanSetWaveIntensity(float v) noexcept
+EMSCRIPTEN_KEEPALIVE void OceanSetWaveIntensity(float32 v) noexcept
 {
     gStore.SetWaveIntensity(v);
 }
-EMSCRIPTEN_KEEPALIVE void OceanSetFoamAmount(float v) noexcept
+EMSCRIPTEN_KEEPALIVE void OceanSetFoamAmount(float32 v) noexcept
 {
     gStore.SetFoamAmount(v);
 }
 
 // Palette controls (RGB in 0..1).
-EMSCRIPTEN_KEEPALIVE void OceanSetDeepColor(float r, float g, float b) noexcept
+EMSCRIPTEN_KEEPALIVE void OceanSetDeepColor(float32 r, float32 g, float32 b) noexcept
 {
     gStore.SetDeepColor({.R = r, .G = g, .B = b});
 }
-EMSCRIPTEN_KEEPALIVE void OceanSetMidColor(float r, float g, float b) noexcept
+EMSCRIPTEN_KEEPALIVE void OceanSetMidColor(float32 r, float32 g, float32 b) noexcept
 {
     gStore.SetMidColor({.R = r, .G = g, .B = b});
 }
-EMSCRIPTEN_KEEPALIVE void OceanSetShallowColor(float r, float g, float b) noexcept
+EMSCRIPTEN_KEEPALIVE void OceanSetShallowColor(float32 r, float32 g, float32 b) noexcept
 {
     gStore.SetShallowColor({.R = r, .G = g, .B = b});
 }
-EMSCRIPTEN_KEEPALIVE void OceanSetFoamColor(float r, float g, float b) noexcept
+EMSCRIPTEN_KEEPALIVE void OceanSetFoamColor(float32 r, float32 g, float32 b) noexcept
 {
     gStore.SetFoamColor({.R = r, .G = g, .B = b});
 }

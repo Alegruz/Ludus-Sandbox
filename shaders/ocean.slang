@@ -7,7 +7,7 @@
 // fullscreen-rendering-handoff.md).
 //
 // The CPU mirror of this layout is src/ocean/ocean_uniforms.h; the two must
-// agree (offsets asserted on the C++ side). set/group 0, binding 0, 128 bytes.
+// agree (offsets asserted on the C++ side). set/group 0, binding 0, 144 bytes.
 
 struct OceanUniforms
 {
@@ -82,6 +82,9 @@ float waveBand(float2 world, float2 dir, float wavelength, float phase)
 [shader("fragment")]
 float4 fragmentMain(float4 position : SV_Position) : SV_Target0
 {
+#if LUDUS_GLSL_ES
+    position.y = ocean.resolution.y - position.y;
+#endif
     // Screen -> world (meters). Top-left origin screen; flip Y so world +Y = up.
     // Aspect-correct: vertical extent fixed, horizontal derived from resolution.
     float2 res = max(ocean.resolution, float2(1.0, 1.0));

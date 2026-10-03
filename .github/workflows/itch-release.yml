@@ -17,6 +17,8 @@ jobs:
   package:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
+    env:
+      CI: "true"
     outputs:
       digest: ${{ steps.package.outputs.digest }}
     steps:
@@ -68,6 +70,27 @@ jobs:
           with open(os.environ['GITHUB_ENV'], 'a') as output:
               output.write('RELEASE_PACKAGE=' + package + '\n')
           PYTHON
+      - name: Extract the verified release snapshot for browser tests
+        run: python3 -m zipfile -e "$RELEASE_PACKAGE/game.zip" out/browser-qa/release-extracted
+      - name: Install pinned browser test dependencies
+        run: |
+          # release-prepare acquired this exact Node runtime through pinned emsdk.
+          node_bin="$PWD/out/ludus/source/out/host-tools/emsdk/node/22.16.0_64bit/bin"
+          test -x "$node_bin/node"
+          export PATH="$node_bin:$PATH"
+          cd tools/browser-tests
+          npm ci
+          npx playwright install --with-deps chromium
+          echo "$node_bin" >> "$GITHUB_PATH"
+      - name: Test pixels, controls, fallback and iframe in the exact release ZIP
+        run: node tools/browser-tests/run.mjs out/browser-qa/release-extracted "$RELEASE_PACKAGE/game.zip" out/browser-qa/release-results
+      - name: Save release browser evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-browser-evidence
+          path: out/browser-qa/release-results/
+          if-no-files-found: warn
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: game-release

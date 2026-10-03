@@ -23,17 +23,19 @@ configures both trees. To reuse installed inputs during iteration:
 ```
 
 The browser Release package contains `index.html`, current `index.js` and
-`index.wasm`, a notice and SDK/dependency licenses. Shaders are compiled and embedded
+`index.wasm`, the iframe test page, notices and SDK/toolchain licenses. Shaders are compiled and embedded
 at build time. Headers, static SDK libraries, shader compilers and debug files
 are excluded. SDK identity, source state, engine-lock/config digests and file
 hashes/modes are recorded. The engine lock is explicitly unresolved because the
 SDK is built from the immutable source pin in `config/ludus-version.txt`; the
 package records the actual configured SDK identity and is treated as local inputs.
 
-Extract `game.zip`, serve it on localhost, and playtest before distribution.
-Static verification checks package consistency; it does not establish gameplay.
-Browser packages use the `web-emscripten-release` preset, while ordinary development
-keeps its existing `web-emscripten-development` path.
+The release workflow extracts `game.zip` and runs the existing Chromium pixel,
+controls, fallback and iframe checks before uploading. Static verification checks
+package consistency; software-GPU tests do not establish hardware performance
+or hosted itch.io acceptance.
+Both browser app presets use the Release SDK; development and release app
+build trees remain separate.
 
 ## Configure automatic uploads once
 
@@ -45,7 +47,7 @@ Create an itch.io game page and configure the repository on GitHub:
 3. Merge the release integration, then push a `v*` tag or manually run the
    **itch.io release** workflow with a version.
 
-The first job builds and verifies the package without upload credentials. The
+The first job builds, verifies and browser-tests the exact package without upload credentials. The
 upload job downloads the artifact and verifies its exact digest again. Only its
 upload step receives the secret. It uses engine tooling pinned by
 `config/ludus-tools-revision.txt` and official butler pinned by version and SHA256.

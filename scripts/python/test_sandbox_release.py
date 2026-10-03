@@ -21,15 +21,19 @@ class ReleaseBootstrapTests(unittest.TestCase):
                 path = source / name
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.touch()
-            for preset in ('web-emscripten-development', 'web-emscripten-release'):
-                sandbox.write_user_presets(project, source, root / 'native-sdk', root / 'slangc',
-                                           root / 'spirv-val', root / 'web-sdk', web_preset=preset)
-                obj = json.loads((project / 'CMakeUserPresets.json').read_text())
-                web = obj['configurePresets'][1]
-                self.assertEqual(web['name'], preset)
-                self.assertEqual(web['inherits'], preset + '-base')
-                self.assertEqual(obj['buildPresets'][1]['configurePreset'], preset)
-                self.assertEqual(web['cacheVariables']['LUDUS_SPIRV_CROSS'], str(source / 'out/shader-tools/spirv-cross/bin/spirv-cross'))
+            sandbox.write_user_presets(project, source, root / 'native-sdk', root / 'slangc',
+                                       root / 'spirv-val', root / 'web-sdk')
+            obj = json.loads((project / 'CMakeUserPresets.json').read_text())
+            presets = {preset['name']: preset for preset in obj['configurePresets']}
+            release = presets['web-emscripten-release']
+            development = presets['web-emscripten-development']
+            self.assertEqual(release['cacheVariables']['CMAKE_BUILD_TYPE'], 'Release')
+            self.assertEqual(release['binaryDir'], '${sourceDir}/out/build/web-emscripten-release')
+            self.assertEqual(release['inherits'], ['web-emscripten-development', 'web-emscripten-release-base'])
+            self.assertEqual(development['cacheVariables']['CMAKE_PREFIX_PATH'], str(root / 'web-sdk'))
+            self.assertEqual(development['cacheVariables']['LUDUS_SPIRV_CROSS'], str(source / 'out/shader-tools/spirv-cross/bin/spirv-cross'))
+            self.assertEqual({preset['name'] for preset in obj['buildPresets']},
+                             {'linux-clang-development', 'web-emscripten-development', 'web-emscripten-release'})
 
     def test_release_sdk_uses_release_engine_preset(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -41,7 +45,7 @@ class ReleaseBootstrapTests(unittest.TestCase):
             expected = root / 'out/install/web-emscripten-release'
             expected.mkdir(parents=True)
             with patch.object(sandbox, 'run') as run:
-                self.assertEqual(sandbox.install_ludus_web_sdk(root, 'web-emscripten-release'), expected)
+                self.assertEqual(sandbox.install_ludus_web_sdk(root), expected)
                 self.assertIn('web-emscripten-release', run.call_args_list[0].args[0])
                 self.assertIn('web-emscripten-release', run.call_args_list[1].args[0])
                 self.assertIn(str(expected), run.call_args_list[2].args[0])

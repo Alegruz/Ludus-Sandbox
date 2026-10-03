@@ -5,7 +5,7 @@ External sandbox application for developing and validating the Ludus engine SDK.
 This checkout contains **Drift**, a runnable top-down stylized 2D ocean
 playground built on the Ludus public fullscreen rendering API. It renders a
 single procedural fullscreen pass (authored in Slang, compiled to SPIR-V for the
-native Vulkan backend and WGSL for the browser WebGPU backend) and drives it with
+native Vulkan backend, WGSL for WebGPU, and GLSL ES 3.00 for WebGL 2) and drives it with
 a GPU-free scene/tuning layer and an accessible tuning panel.
 
 ![Drifting ocean](docs/screenshots/ocean-drifting-1080p.png)
@@ -24,10 +24,13 @@ a GPU-free scene/tuning layer and an accessible tuning panel.
   …). No engine sources are vendored and no private/backend headers are used.
 * **One procedural pass.** `shaders/ocean.slang` is the only shader; it is built
   at configure/build time by the engine's `ludus_compile_shader` helper into
-  SPIR-V + WGSL. No shader compiler or network request runs during gameplay.
+  SPIR-V + WGSL + GLSL ES. No shader compiler or network request runs during gameplay.
 * **Scene/tuning state lives outside GPU code.** `src/ocean/` is a pure,
   dependency-light C++ layer (settings, validation, JSON, coordinate mapping,
   current/time integration) that is unit-tested without a GPU or an SDK.
+* **Browser fallback.** Auto tries WebGPU, then WebGL 2 on a fresh canvas.
+  Force either path with `?backend=webgpu` or `?backend=webgl2`. Restart remains
+  available when both fail; controls stay clear of the status message.
 * **Accessible controls.** The browser build wraps the canvas in a collapsible
   DOM panel (`web/shell.html`) that talks to the app through a tiny explicit
   bridge; the engine stays unaware of ocean controls.
@@ -40,20 +43,20 @@ a GPU-free scene/tuning layer and an accessible tuning panel.
 | [docs/DESIGN.md](docs/DESIGN.md) | World units, coordinate orientation, aspect-correct mapping, current/time continuity, architecture, and the uniform contract. |
 | [docs/VALIDATION.md](docs/VALIDATION.md) | Honest validation results: what was verified here, what requires a GPU host, and how to reproduce the remaining checks. |
 
-CI (`.github/workflows/ci.yml`) runs three jobs on every push/PR, all green:
+CI (`.github/workflows/ci.yml`) defines three gates on every push/PR:
 a fast format + clang-tidy + GPU-free-tests gate, a native SDK build + `ctest`
-(with real `spirv-val`), and a browser (WebGPU) package build whose artifact is
-uploaded. See
+(with real `spirv-val`), and an exact Release ZIP browser test on real software WebGPU/WebGL 2, with
+the tested artifact and evidence uploaded. Current CI status belongs to the PR. See
 [docs/VALIDATION.md](docs/VALIDATION.md#continuous-integration) for details.
 
 ## Quick start
 
 ```bash
-# 1. Acquire Ludus + pinned shader tools and configure the sandbox.
+# 1. Acquire Ludus + pinned shader tools and configure native + browser builds.
 #    Pins the engine revision in config/ludus-version.txt and wires the
 #    pinned Slang/SPIRV-Tools into CMake. See docs/BUILD.md for details and
 #    for pointing at an already-installed SDK (--sdk-dir / LUDUS_SANDBOX_SDK_DIR).
-./init.sh
+./init.sh --with-web
 
 # 2a. Native (Vulkan) — requires a Wayland display and a Vulkan-capable GPU.
 cmake --build --preset linux-clang-development
@@ -62,7 +65,7 @@ cmake --build --preset linux-clang-development
 LUDUS_OCEAN_SETTINGS=my-ocean.json \
   ./out/build/linux-clang-development/LudusSandbox          # or a settings file
 
-# 2b. Browser (WebGPU) — serve over localhost and open in a WebGPU browser.
+# 2b. Browser — Auto selects WebGPU or falls back to WebGL 2.
 cmake --build --preset web-emscripten-development
 python3 -m http.server 8000 --bind 127.0.0.1 \
   --directory out/build/web-emscripten-development
@@ -75,7 +78,7 @@ ctest --test-dir out/build/linux-clang-development --output-on-failure
 ## Repository layout
 
 ```
-shaders/ocean.slang        Author-owned procedural ocean (SPIR-V + WGSL)
+shaders/ocean.slang        Author-owned ocean (SPIR-V + WGSL + GLSL ES)
 src/ocean/                 GPU-free scene & tuning (settings, clock, uniforms, mapping)
 src/ocean/ocean_scene.*    RHI lifecycle driver (public API only)
 src/main_native.cpp        Native entry (config/CLI settings)

@@ -1,0 +1,88 @@
+{
+  "kind": "Software GPU only; hardware and hosted acceptance unverified",
+  "rafDelayMs": 100,
+  "zipSha256": "4d130b1dead7de561df8b25fd1992c4d742980efeccaaf909172021928eafc76",
+  "browserVersion": "140.0.7339.186",
+  "launchArgs": [
+    "--enable-unsafe-webgpu",
+    "--enable-features=Vulkan",
+    "--use-webgpu-adapter=swiftshader",
+    "--use-angle=swiftshader",
+    "--use-vulkan=swiftshader",
+    "--disable-vulkan-surface",
+    "--enable-unsafe-swiftshader"
+  ],
+  "cases": [
+    {
+      "name": "webgpu: real ocean pixels, controls, pause, restart",
+      "status": "passed",
+      "pixelVariation": 55.640816409402234
+    },
+    {
+      "name": "webgl2: real ocean pixels, controls, pause, restart",
+      "status": "passed",
+      "pixelVariation": 55.640816409402234
+    },
+    {
+      "name": "WebGPU and WebGL 2 ocean orientation and palette agree",
+      "status": "passed",
+      "meanPixelDifference": 0
+    },
+    {
+      "name": "Auto fallback after missing",
+      "status": "passed",
+      "backend": "webgl2"
+    },
+    {
+      "name": "Auto fallback after adapter",
+      "status": "passed",
+      "backend": "webgl2"
+    },
+    {
+      "name": "Auto fallback after device",
+      "status": "passed",
+      "backend": "webgl2"
+    },
+    {
+      "name": "Auto fallback after surface",
+      "status": "passed",
+      "backend": "webgl2"
+    },
+    {
+      "name": "forced WebGPU fails explicitly without fallback",
+      "status": "passed"
+    },
+    {
+      "name": "both unavailable: readable narrow error and restart",
+      "status": "passed"
+    },
+    {
+      "name": "narrow responsive controls, DPR, iframe",
+      "status": "passed"
+    },
+    {
+      "name": "WebGL 2 loss, restart and repeated resize",
+      "status": "passed",
+      "loseContext": true
+    },
+    {
+      "name": "network failure index.js",
+      "status": "passed"
+    },
+    {
+      "name": "network failure index.wasm",
+      "status": "passed"
+    }
+  ],
+  "engineRevision": "70f9debf16a7ec53e33e0f9b87a4106c33896c7a",
+  "packageProfile": "web-release",
+  "version": "0.1.0",
+  "host": "Ubuntu, pinned Emscripten 4.0.23; Chromium software GPU",
+  "logicTests": {
+    "checks": 81,
+    "failures": 0,
+    "asanUbsan": "passed"
+  },
+  "releaseBootstrapTests": 4,
+  "liveItchUpload": "not run; target/credential configuration is pending"
+}

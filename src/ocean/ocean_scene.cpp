@@ -43,14 +43,16 @@ void OceanScene::Shutdown() noexcept
 
 void OceanScene::Fail(SceneState state, rhi::StartupError error) noexcept
 {
+    mStartup = rhi::GetStartup();
     Shutdown();
     mState = state;
     mError = error;
 }
 
-bool OceanScene::Start() noexcept
+bool OceanScene::Start(rhi::BackendSelection selection) noexcept
 {
     Shutdown();
+    mStartup = {};
     mClock = {};
     mFrames = 0;
 
@@ -67,7 +69,7 @@ bool OceanScene::Start() noexcept
         return false;
     }
 
-    const auto started = rhi::Start({.Name = "Drift Ocean", .Version = 1}, mWindow->GetNativeWindowInfo());
+    const auto started = rhi::Start({.Name = "Drift Ocean", .Version = 1}, mWindow->GetNativeWindowInfo(), selection);
     if (started != rhi::StartStatus::Ready && started != rhi::StartStatus::Pending)
     {
         Fail(SceneState::Failed, rhi::GetStartup().Error);
@@ -215,6 +217,7 @@ SceneState OceanScene::Tick() noexcept
     mLastTick = now;
 
     const auto startup = rhi::GetStartup();
+    mStartup = startup;
     if (startup.State == rhi::StartupState::Failed || startup.State == rhi::StartupState::DeviceLost)
     {
         Fail(startup.State == rhi::StartupState::DeviceLost ? SceneState::DeviceLost : SceneState::Failed,
@@ -231,7 +234,7 @@ SceneState OceanScene::Tick() noexcept
         Fail(SceneState::Failed, rhi::StartupError::RenderingUnavailable);
         return mState;
     }
-    if (rhi::GetStatus(mPipeline) == rhi::ResourceStatus::Pending)
+    if (!mPipelineCreated || rhi::GetStatus(mPipeline) == rhi::ResourceStatus::Pending)
     {
         return mState; // pipeline still building
     }
@@ -246,7 +249,7 @@ SceneState OceanScene::Tick() noexcept
     // Gather presentation/visibility state. On web this comes from the browser
     // window snapshot; on native we treat the window as visible.
     platform::browser::WindowState input;
-    if (startup.SelectedBackend == rhi::Backend::WebGPU)
+    if (mWindow->GetNativeWindowInfo().System == platform::WindowSystem::WebCanvas)
     {
         (void)mWindow->SetBrowserFramebufferLimit(startup.MaxTextureDimension2D);
         (void)mWindow->GetBrowserState(input);

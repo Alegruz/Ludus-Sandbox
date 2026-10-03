@@ -1,3 +1,7 @@
-Ludus Sandbox uses Ludus. See licenses/Ludus/ for SDK and dependency notices.
+Drift ocean playground uses Ludus. See licenses/Ludus/ for SDK/dependency notices.
+Browser runtime notices for Emscripten, musl, libc++, libc++abi, compiler-rt,
+emdawnwebgpu and WebGPU native headers are in licenses/.
+SPIRV-Cross is a build-time tool; its notice is included, its binary is not shipped.
 Sandbox source and authored ocean shaders retain their repository license terms.
 No third-party game assets are included in this browser package.
+Payload identity and file hashes are recorded in build-info.json.
