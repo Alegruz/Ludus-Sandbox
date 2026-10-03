@@ -340,10 +340,12 @@ def acquire_ludus(
     else:
         print(f"Using existing bootstrap-managed Ludus clone: {source_dir}")
 
-    run(["git", "fetch", "--tags", "--prune", "origin"], cwd=source_dir)
+    # A squash-merged PR pin may survive only under GitHub's hidden pull refs.
+    # Fetch it explicitly; the ordinary branch/tag fetch does not acquire it.
+    run(["git", "fetch", "--tags", "--prune", "origin", revision], cwd=source_dir)
 
-    # Resolve branch names, tags, or exact SHAs.
-    run(["git", "checkout", "--detach", revision], cwd=source_dir)
+    # FETCH_HEAD also avoids resolving a stale local branch for a named pin.
+    run(["git", "checkout", "--detach", "FETCH_HEAD"], cwd=source_dir)
 
     print(f"Ludus revision: {revision}")
     return source_dir
