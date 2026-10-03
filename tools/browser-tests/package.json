@@ -1,0 +1,12 @@
+{
+  "name": "drift-ocean-browser-tests",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node run.mjs"
+  },
+  "devDependencies": {
+    "playwright": "1.55.1",
+    "pngjs": "7.0.0"
+  }
+}

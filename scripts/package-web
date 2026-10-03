@@ -1,0 +1,138 @@
+#!/usr/bin/env python3
+"""Package an already-built Release Drift app, with exact payload verification."""
+import argparse
+import hashlib
+from html.parser import HTMLParser
+import json
+from pathlib import Path
+import subprocess
+import tempfile
+import zipfile
+
+ROOT = Path(__file__).resolve().parents[1]
+NOTICES = {
+    'LICENSE': 'Emscripten.txt', 'AUTHORS': 'Emscripten-authors.txt',
+    'system/lib/libc/musl/COPYRIGHT': 'musl.txt',
+    'system/lib/libcxx/LICENSE.TXT': 'libcxx.txt',
+    'system/lib/libcxxabi/LICENSE.TXT': 'libcxxabi.txt',
+    'system/lib/compiler-rt/LICENSE.TXT': 'compiler-rt.txt',
+}
+
+def sha(data):
+    return hashlib.sha256(data).hexdigest()
+
+class References(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.files = []
+    def handle_starttag(self, tag, attrs):
+        for key, value in attrs:
+            if value and (key == 'src' or (tag == 'link' and key == 'href')):
+                self.files.append(value)
+
+def leb(data, offset):
+    value = 0
+    for shift in range(0, 35, 7):
+        byte = data[offset]; offset += 1
+        value |= (byte & 127) << shift
+        if byte < 128:
+            return value, offset
+    raise ValueError('Invalid wasm section length')
+
+def verify_wasm(data):
+    if data[:8] != b'\0asm\x01\0\0\0':
+        raise ValueError('Invalid wasm')
+    offset = 8
+    memory = False
+    while offset < len(data):
+        section = data[offset]
+        size, start = leb(data, offset + 1)
+        end = start + size
+        if end > len(data):
+            raise ValueError('Truncated wasm')
+        if section == 0:
+            length, position = leb(data, start)
+            name = data[position:position + length]
+            if name == b'name' or name.startswith((b'.debug', b'sourceMappingURL')):
+                raise ValueError('Release wasm contains debug data')
+        if section == 5:
+            count, pos = leb(data, start)
+            flags, pos = leb(data, pos)
+            initial, pos = leb(data, pos)
+            maximum, pos = leb(data, pos)
+            if (count, flags, initial, maximum, pos) != (1, 1, 512, 4096, end):
+                raise ValueError('Unexpected wasm memory policy')
+            memory = True
+        offset = end
+    if not memory:
+        raise ValueError('Missing wasm memory policy')
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--ludus-source', type=Path, default=ROOT / 'out/ludus/source')
+    parser.add_argument('--build-dir', type=Path, default=ROOT / 'out/build/web-emscripten-release')
+    args = parser.parse_args()
+    engine = args.ludus_source.resolve()
+    build = args.build_dir.resolve()
+    cache = (build / 'CMakeCache.txt').read_text()
+    if 'CMAKE_BUILD_TYPE:STRING=Release' not in cache:
+        raise ValueError('Package requires a Release build')
+    files = {name: (build / name).read_bytes() for name in ('index.html', 'index.js', 'index.wasm')}
+    files['iframe.html'] = (ROOT / 'web/iframe.html').read_bytes()
+    for name, data in files.items():
+        if any(path in data for path in (b'/home/', b'/workspace/', b'/Users/', b'C:\\')):
+            raise ValueError('Developer path in ' + name)
+    verify_wasm(files['index.wasm'])
+    if b'sourceMappingURL=' in files['index.js'] or b'index.wasm' not in files['index.js']:
+        raise ValueError('Unexpected JS payload')
+    for name in ('index.html', 'iframe.html'):
+        refs = References(); refs.feed(files[name].decode())
+        if not refs.files or any(ref not in files for ref in refs.files):
+            raise ValueError('Missing or external asset in ' + name)
+    sdk = engine / 'out/host-tools/emsdk/upstream/emscripten'
+    port = sdk / 'cache/ports/emdawnwebgpu/emdawnwebgpu_pkg'
+    files['licenses/Ludus.txt'] = (engine / 'LICENSE').read_bytes()
+    for source, target in NOTICES.items():
+        files['licenses/' + target] = (sdk / source).read_bytes()
+    files['licenses/emdawnwebgpu.txt'] = (port / 'webgpu/src/LICENSE').read_bytes()
+    notice, separator, _ = (port / 'webgpu/include/webgpu/webgpu.h').read_bytes().partition(b'#ifndef WEBGPU_H_')
+    if not separator or b'BSD 3-Clause License' not in notice:
+        raise ValueError('Missing WebGPU header notice')
+    files['licenses/webgpu-native.txt'] = notice
+    files['licenses/SPIRV-Cross.txt'] = (engine / 'out/shader-tools/spirv-cross/LICENSE').read_bytes()
+    files['NOTICE.txt'] = b'Drift ocean playground. Ludus: MIT. Runtime and build-tool notices are in licenses/. SPIRV-Cross is a build-time tool and is not shipped. Payload identity and tool pins are in build-info.json.\n'
+    manifest = json.loads((build / 'ludus-shaders/LudusSandbox/ocean/manifest.json').read_text())
+    if manifest['uniform_sizes'] != {'vertex': 144, 'fragment': 144, 'wgsl': 144, 'glsl_es': 144}:
+        raise ValueError('Ocean upload layout is not valid across all backends')
+    manifest.pop('commands', None)
+    revision = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=engine, text=True).strip()
+    info = {'preset': 'web-emscripten-release', 'engine_revision': revision,
+        'engine_dirty': bool(subprocess.check_output(['git', 'status', '--porcelain', '--untracked-files=no'], cwd=engine)),
+        'memory': {'initial_bytes': 33554432, 'maximum_bytes': 268435456, 'stack_bytes': 65536, 'growth': True, 'threads': False},
+        'debug_symbols': False, 'shader': manifest,
+        'toolchains': {name: json.loads((engine / ('config/' + name + '.json')).read_text()) for name in ('web_toolchain', 'shader_toolchain', 'spirv_cross_toolchain')},
+        'sha256': {name: sha(data) for name, data in sorted(files.items())}}
+    files['build-info.json'] = (json.dumps(info, sort_keys=True, indent=2) + '\n').encode()
+    if len(files) > 1000 or sum(map(len, files.values())) > 500_000_000 or any(len(data) > 200_000_000 for data in files.values()):
+        raise ValueError('Package exceeds HTML archive limits')
+    destination = ROOT / 'out/packages/drift-ocean-web-release.zip'
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(dir=destination.parent) as temporary:
+        pending = Path(temporary) / destination.name
+        with zipfile.ZipFile(pending, 'w', compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
+            for name, data in sorted(files.items()):
+                entry = zipfile.ZipInfo(name, (1980, 1, 1, 0, 0, 0))
+                entry.create_system = 3; entry.external_attr = 0o100644 << 16
+                entry.compress_type = zipfile.ZIP_DEFLATED
+                archive.writestr(entry, data, compresslevel=9)
+        with zipfile.ZipFile(pending) as archive:
+            if sorted(archive.namelist()) != sorted(files) or archive.testzip() is not None:
+                raise ValueError('Archive identity/CRC mismatch')
+            for name, data in files.items():
+                if archive.read(name) != data:
+                    raise ValueError('Archive payload mismatch: ' + name)
+        pending.replace(destination)
+    print(f'{destination}\nSHA256 {sha(destination.read_bytes())}')
+
+if __name__ == '__main__':
+    main()

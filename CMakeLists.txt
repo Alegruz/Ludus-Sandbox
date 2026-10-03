@@ -39,11 +39,11 @@ target_compile_features(ludus_sandbox_ocean PUBLIC cxx_std_23)
 # <ludus/foundation/base/types.h>.
 target_compile_definitions(ludus_sandbox_ocean PUBLIC LUDUS_SANDBOX_WITH_SDK)
 target_link_libraries(ludus_sandbox_ocean PUBLIC Ludus::FoundationBase)
-target_compile_options(ludus_sandbox_ocean PRIVATE -Wall -Wextra -Wpedantic -fno-exceptions)
+target_compile_options(ludus_sandbox_ocean PRIVATE -Wall -Wextra -Wpedantic -Werror -fno-exceptions)
 
 # ---------------------------------------------------------------------------
 # The runnable ocean playground. Native uses the Vulkan backend; the browser
-# build (Emscripten) uses WebGPU and the DOM panel.
+# build (Emscripten) uses Auto WebGPU/WebGL 2 selection and the DOM panel.
 # ---------------------------------------------------------------------------
 add_executable(LudusSandbox
     src/ocean/ocean_scene.cpp
@@ -56,10 +56,11 @@ target_link_libraries(LudusSandbox PRIVATE
     Ludus::Platform
     Ludus::GraphicsRhi
 )
-target_compile_options(LudusSandbox PRIVATE -Wall -Wextra -Wpedantic -fno-exceptions)
+target_compile_options(LudusSandbox PRIVATE -Wall -Wextra -Wpedantic -Werror -fno-exceptions)
 
-# Author-owned Slang ocean shader -> SPIR-V (native) + WGSL (web) at build time.
-# Requires LUDUS_SLANG_COMPILER and LUDUS_SPIRV_VALIDATOR (pinned host tools).
+# Author-owned Slang ocean shader -> SPIR-V (native) + WGSL and GLSL ES (web) at build time.
+# Requires pinned LUDUS_SLANG_COMPILER, LUDUS_SPIRV_VALIDATOR and
+# LUDUS_SPIRV_CROSS host tools for the browser build.
 ludus_compile_shader(
     TARGET LudusSandbox
     NAME ocean
@@ -101,7 +102,7 @@ if(LUDUS_SANDBOX_BUILD_TESTS AND NOT EMSCRIPTEN)
     # the exact same source as the SDK build with identical widths.
     target_include_directories(ludus_sandbox_ocean_tests PRIVATE src)
     target_compile_features(ludus_sandbox_ocean_tests PRIVATE cxx_std_23)
-    target_compile_options(ludus_sandbox_ocean_tests PRIVATE -Wall -Wextra -Wpedantic -fno-exceptions)
+    target_compile_options(ludus_sandbox_ocean_tests PRIVATE -Wall -Wextra -Wpedantic -Werror -fno-exceptions)
     enable_testing()
     add_test(NAME ludus_sandbox_ocean_tests COMMAND ludus_sandbox_ocean_tests)
 endif()

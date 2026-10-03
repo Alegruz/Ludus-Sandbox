@@ -25,6 +25,15 @@
         "CMAKE_BUILD_TYPE": "RelWithDebInfo",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
       }
+    },
+    {
+      "name": "web-emscripten-release-base",
+      "hidden": true,
+      "inherits": "web-emscripten-development-base",
+      "binaryDir": "${sourceDir}/out/build/web-emscripten-release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
     }
   ]
 }
