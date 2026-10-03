@@ -25,32 +25,21 @@
   }
   #canvas:focus-visible { outline: 3px solid #ffd27d; outline-offset: -3px; }
 
-  /* Status line, top-centre, non-interactive so it never steals canvas input. */
-  #status {
-    position: fixed;
-    top: 10px; left: 50%;
-    transform: translateX(-50%);
-    padding: 6px 14px;
-    border-radius: 999px;
-    background: rgba(7, 16, 34, 0.72);
-    backdrop-filter: blur(6px);
-    pointer-events: none;
-    max-width: 90vw;
-  }
+  /* Status and controls occupy separate grid cells, including narrow embeds. */
+  #hud { position: fixed; inset: 10px; pointer-events: none; display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 320px); gap: 12px; align-items: start; }
+  #status-region { pointer-events: auto; background: rgba(7,16,34,.86); border-radius: 12px;
+    padding: 10px 14px; max-width: 540px; }
+  #status { margin: 0; overflow-wrap: anywhere; }
   #status[data-state="failed"], #status[data-state="device-lost"] { color: #ffb4a2; }
-
-  /* Collapsible tuning panel, top-right, over the canvas. */
-  #panel {
-    position: fixed;
-    top: 10px; right: 10px;
-    width: min(320px, calc(100vw - 20px));
-    max-height: calc(100vh - 20px);
-    overflow: auto;
-    background: rgba(10, 18, 34, 0.86);
-    backdrop-filter: blur(8px);
-    border: 1px solid rgba(255,255,255,0.12);
-    border-radius: 12px;
-    padding: 0;
+  #status-restart { margin-top: 8px; }
+  #panel { pointer-events: auto; width: 100%; max-height: calc(100vh - 20px); overflow: auto;
+    background: rgba(10,18,34,.86); backdrop-filter: blur(8px);
+    border: 1px solid rgba(255,255,255,.12); border-radius: 12px; padding: 0; }
+  [hidden] { display: none !important; }
+  @media (max-width: 650px) {
+    #hud { grid-template-columns: 1fr; align-content: start; }
+    #panel { max-height: calc(100vh - 130px); }
   }
   #panel > summary {
     cursor: pointer;
@@ -98,9 +87,9 @@
 <body>
 
 <canvas id="canvas" width="1280" height="720" tabindex="0" aria-label="Ocean scene. Click to focus; the tuning panel is to the right."></canvas>
-<p id="status" role="status" aria-live="polite" data-state="loading" data-frames="0">Loading the ocean…</p>
+<div id="hud"><div id="status-region"><p id="status" role="status" aria-live="polite" data-state="loading" data-frames="0">Loading the ocean…</p><button id="status-restart" type="button" hidden>Restart</button></div>
 
-<details id="panel" open>
+<details id="panel" hidden>
   <summary aria-label="Ocean tuning panel">Drift — ocean controls</summary>
   <div class="panel-body">
 
@@ -160,7 +149,7 @@
     </fieldset>
 
   </div>
-</details>
+</details></div>
 
 <script>
 // ---------------------------------------------------------------------------
@@ -173,6 +162,8 @@ var Module = {
     const s = document.getElementById('status');
     s.textContent = 'The playground could not load. Please reload the page.';
     s.dataset.state = 'failed';
+    document.getElementById('panel').hidden = true;
+    document.getElementById('status-restart').hidden = false;
     console.error('Ludus startup failed:', reason);
   }
 };
@@ -242,6 +233,10 @@ pauseBtn.addEventListener('click', () => {
 byId('reset-sim').addEventListener('click', () => call('OceanResetSimulation'));
 byId('reset-all').addEventListener('click', () => call('OceanResetSettings'));
 byId('restart').addEventListener('click', () => call('OceanRestart'));
+byId('status-restart').addEventListener('click', () => {
+  if (typeof Module._OceanRestart === 'function') call('OceanRestart');
+  else location.reload();
+});
 
 // --- Settings JSON import/export ------------------------------------------
 const jsonBox = byId('json');

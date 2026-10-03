@@ -1,149 +1,78 @@
-# Validation results (honest)
+# Drift ocean validation
 
-This records exactly what was verified, in which environment, and what still
-requires a GPU host. Mocks cannot prove appearance; interactive GPU verification
-is called out explicitly below and is **not** claimed as done where it was not.
+The WebGL fallback work consumes the public installed SDK from [engine PR #56](https://github.com/Alegruz/Ludus/pull/56).
+The exact engine commit is in `config/ludus-version.txt`; the tested Release ZIP
+records that commit and the pinned toolchains in `build-info.json`.
 
-## Environment used for the checks below
+## Current checks
 
-* OS: Amazon Linux 2023 (dnf), x86_64, **glibc 2.34**.
-* Compiler: Clang/clang-tidy/clang-format **18.1.8**.
-* Pinned Slang **2026.1.2** acquired via the engine `shader-probe` (works here).
-* Pinned `spirv-val` digest **matches the engine pin**, but it requires glibc
-  **2.38+** and therefore does **not run** on this host.
-* **No GPU** (`/dev/dri` absent, no `libvulkan`, no Wayland). So neither the
-  native Vulkan scene nor real browser WebGPU can execute in this environment —
-  the same reason the engine's own fullscreen handoff states its GPU validation
-  ran "outside sandbox restrictions."
+The reference tools are Clang/LLVM 18, Slang 2026.1.2, the digest-pinned SPIR-V
+validator and SPIRV-Cross `vulkan-sdk-1.4.313.0`. The browser SDK uses the engine's
+pinned Emscripten toolchain. Shader compilers and translators are build tools;
+none run during gameplay.
 
-## What was verified here
+| Check | Result |
+| --- | --- |
+| Native and Release browser builds against installed SDK | Warning-clean with warnings as errors. |
+| GPU-free ocean logic | 81 checks, zero failures; native CTest passed. |
+| Logic ASan/UBSan with leak detection | 81 checks, zero failures. |
+| Pinned Clang 18 format/tidy | Logic and changed browser integration passed. |
+| Real shader compilation and validation | SPIR-V, WGSL and GLSL ES emitted; real `spirv-val` passed. |
+| Uniform contract | 144 bytes in CPU, SPIR-V, WGSL and independently derived GLSL ES std140 layout. |
+| Release archive | No debug wasm, developer paths or missing/external runtime assets; payload hashes and notices verified. |
+| Exact archive browser QA | 13 cases passed in Chromium 140.0.7339.186 on SwiftShader. |
 
-| Check | Command | Result |
-| --- | --- | --- |
-| GPU-free logic tests (settings validation, JSON round-trip, coordinate mapping, aspect/resize stability, current/time continuity, long-session precision) | `clang++ -std=c++23 -Wall -Wextra -Wpedantic -fno-exceptions -I src tests/ocean_tests.cpp src/ocean/*.cpp && ./a.out` | **81 checks, 0 failures.** Warning-clean. |
-| Uniform CPU/GPU layout agreement | `static_assert`s in `src/ocean/ocean_uniforms.h` (compiled above) | **Pass** — 144-byte block, every offset asserted. |
-| Shader compiles to SPIR-V (both stages) + WGSL with the **pinned** Slang | `slangc … -target spirv …` / `-target wgsl …` | **Pass** — vertex SPIR-V, fragment SPIR-V, combined WGSL all emit cleanly. |
-| Shader reflection matches the CPU contract | Slang `-reflection-json` | **Pass** — one constant buffer at set/group 0, binding 0, size **144** (= `sizeof(OceanUniforms)`); SPIR-V entries `main`/`main`, WGSL entries `vertexMain`/`fragmentMain`. |
-| Generated `ocean.h` factory header | engine `cmake/shaders/compile_shader.py` driver | **Pass** — produces `ludus::shaders::ocean::Vertex()/Fragment()` with `UniformSize = 144`, exactly what `ocean_scene.cpp` calls. |
-| Integration code is API-correct | `clang++ -std=c++23 -fsyntax-only -Wall -Wextra -fno-exceptions` against the **real** engine public headers + generated `ocean.h` | **Pass** for `src/ocean/ocean_scene.cpp` and `src/main_native.cpp`. |
-| Static analysis | `clang-tidy` (engine `.clang-tidy`) on `src/ocean/*.cpp` | **Clean.** |
-| Formatting | `clang-format` (engine `.clang-format`) | Applied to all `src/`/`tests/` C++. |
-| Python driver syntax | `python3 -m py_compile scripts/python/sandbox.py` | **Pass.** |
-| Authored appearance (offline) | `tools/preview/ocean_preview.cpp` (faithful CPU port of the shader) rendered representative PNGs | Captured; see `docs/screenshots/`. This shows the authored look; it is **not** GPU proof. |
+The browser cases verify actual presented ocean pixels and controls in both
+backends, paused frame agreement (orientation and palette), pause/resume,
+restart, fallback after missing WebGPU API/adapter/device/surface, strict forced
+WebGPU failure, readable errors when both backends are unavailable, narrow
+controls, DPR, an ordinary sandbox iframe, WebGL context loss/restart/resize,
+and JavaScript/wasm network failure. Screenshots were visually inspected.
+Machine-readable results and ZIP identity are in `webgl-validation.json`.
 
-### Important caveat on the SPIR-V validation step
+The harness injects a **test-only 100 ms RAF delay** to bound the expensive
+procedural shader queue on software rendering. It does not measure interactive
+frame rate. Production code has no such delay. See
+[the browser test instructions](../tools/browser-tests/README.md) for exact
+commands, launch flags and limitations.
 
-The real build pipeline runs `spirv-val --target-env vulkan1.1` on each SPIR-V
-module. The pinned validator binary could not execute on this glibc-2.34 host
-(it needs glibc 2.38+). The SPIR-V itself was produced by the pinned Slang
-without errors; genuine `spirv-val` validation must be run on a glibc-2.38+ host
-(e.g. the reference Ubuntu 24.04). On that host the standard build performs this
-automatically — no code change is needed.
+## Remaining acceptance gates
 
-## What still requires a GPU host (NOT verified here)
+CI results must be checked on this PR. The engine passed every local per-header
+limit but exceeded its aggregate budget on a loaded host. The unchanged budget
+subsequently passed on the CI reference runner for the pinned engine commit:
+[engine CI run](https://github.com/Alegruz/Ludus/actions/runs/37086398722).
+Native SDK and ASan/UBSan CI jobs also passed there. No budget was relaxed.
+Physical WebGPU/WebGL 2 devices, flag-free browser compatibility, native
+Wayland/Vulkan presentation, hosted HTTPS/itch.io acceptance, frame-rate targets
+and long-session resource measurements remain unverified. Software rendering
+establishes actual shader/pixel behavior but does not establish those targets.
 
-These are the acceptance items that need a Wayland+Vulkan GPU or a WebGPU browser
-and were therefore **not** executed in this environment. They are expected to
-pass given the API-correct integration, but are honestly reported as unverified:
-
-* The animated ocean rendering through Ludus end-to-end (native and browser).
-* Live controls visibly affecting the running scene; pause preserving the scene;
-  reset/presets; exported-settings round-trip in the live app.
-* Resize / DPR / wide+tall windows / tab hide+resume / repeated restart behaving
-  without stretching or resource leaks **at runtime**. (The *math* for
-  aspect/resize stability and the continuity/freeze/clamp logic is unit-tested;
-  the GPU resource lifecycle is driven by the engine's documented, already-tested
-  RHI contract.)
-* Measured frame timing / 60 fps at 1080p, and representative GPU screenshots.
-
-### How to reproduce the remaining checks on a capable host
-
-1. On Ubuntu 24.04 (glibc 2.38+, Clang/LLD 18) with a Vulkan GPU:
-   ```bash
-   ./init.sh
-   cmake --build --preset linux-clang-development
-   ctest --test-dir out/build/linux-clang-development --output-on-failure
-   ./out/build/linux-clang-development/LudusSandbox         # observe the ocean
-   ```
-   Record the adapter (`vulkaninfo`), resolution, and measured frame time.
-2. For the browser, on a machine with a WebGPU browser:
-   ```bash
-   cmake --build --preset web-emscripten-development
-   python3 -m http.server 8000 --bind 127.0.0.1 \
-     --directory out/build/web-emscripten-development
-   ```
-   Open `http://127.0.0.1:8000/`, exercise the panel (presets, sliders,
-   pause/reset, export/import), and capture screenshots + the browser's frame
-   timing. Report the browser/device/resolution and actual measured fps. Do not
-   claim support for untested devices.
+On a target device, serve the Release files over HTTPS or localhost. Exercise
+Auto, `?backend=webgpu` and `?backend=webgl2`, panel controls, settings export and
+import, hide/resume, restart, DPR/resize and iframe embedding. Record browser,
+adapter, resolution, frame time and observed resource behavior. For native
+presentation, run `LudusSandbox` on Wayland with a Vulkan GPU. Report measured
+results rather than inferring performance from shader complexity.
 
 ## Continuous integration
 
-`.github/workflows/ci.yml` runs on every push and pull request, in three tiers:
+The `fast` job runs Clang 18 format/tidy and GPU-free logic tests. The `native`
+job acquires the pinned SDK and builds/tests the native application with real
+SPIR-V validation. The `web` job builds a Release browser SDK and application,
+packages/extracts the exact ZIP, runs the pinned Playwright/SwiftShader checks,
+and uploads the tested ZIP and evidence. CI status is reported by the PR;
+previous green runs do not establish the result of this revision.
 
-| Job | Runner | What it proves |
-| --- | --- | --- |
-| **fast** | ubuntu-24.04 | Formatting (`clang-format-18 --dry-run --Werror`), `clang-tidy-18` with warnings-as-errors on the GPU-free sources, and the host logic tests (`tests/ocean_tests.cpp`). No engine SDK needed, so it is the quick gate on most changes. |
-| **native** | ubuntu-24.04 | `./init.sh` acquires the pinned Ludus SDK + Slang/SPIRV-Tools, builds the native (Vulkan) app — including the Slang → SPIR-V/WGSL shader build, with the pinned `spirv-val` actually running (ubuntu-24.04 has glibc 2.38+) — runs `ctest`, and asserts the generated shader artifacts (`ocean.h`, `*.spv`, `ocean.wgsl`) are present in the build. **This job passes green on CI**, confirming end-to-end SDK linkage and the real SPIR-V validation that the GPU-less dev sandbox could not run. |
-| **web** | ubuntu-24.04 | `./init.sh --with-web` acquires the Emscripten toolchain, builds the engine web tree and installs it to a prefix, configures and builds the browser package, verifies `index.html`/`index.js`/`index.wasm`, and uploads it as an artifact. **This job passes green on CI.** |
+## Historical baseline
 
-`native` and `web` depend on `fast`. All three jobs pass green on CI, so each is
-a hard gate. The `native` job proves end-to-end SDK linkage and the real
-`spirv-val` SPIR-V validation; the `web` job proves the Emscripten/WebGPU
-package builds and ships. (The web SDK is consumed via a build-tree
-`cmake --install` because the engine exposes no relocatable web SDK through
-`install-sdk`; see `install_ludus_web_sdk` in `scripts/python/sandbox.py`.)
+The original Kiro implementation was validated on Amazon Linux 2023 with glibc
+2.34, where the pinned validator could not run and no GPU presentation was
+possible. Its 81 logic checks, shader compilation and offline CPU screenshots
+were useful baseline evidence. The current reference-host builds and real
+software-GPU checks above supersede those limitations. Existing
+`docs/screenshots/` images remain authored-look previews, not hardware proof.
 
-GPU rendering, interactive controls, and frame timing are still **not**
-exercised (headless runners have no GPU); CI proves the app formats, analyzes,
-tests, links against the SDK, and that the shader artifacts build and ship. A
-follow-up could add a software-GPU browser smoke (Playwright + SwiftShader under
-`xvfb`), mirroring the engine's `webgpu-probe` workflow.
-
-## Known engine SDK packaging gap (Threads)
-
-While wiring CI we hit a genuine engine SDK packaging bug, surfaced on a clean
-`ubuntu-24.04` runner consuming the installed SDK:
-
-```
-CMake Error at .../lib/cmake/Ludus/LudusTargets.cmake (set_target_properties):
-  The link interface of target "Ludus::FoundationProfiling" contains:
-    Threads::Threads
-  but the target was not found.
-```
-
-`modules/foundation/profiling/CMakeLists.txt` links `Threads::Threads` **PUBLIC**
-(`find_package(Threads REQUIRED)` + `target_link_libraries(... PUBLIC
-Threads::Threads)`), so the imported target leaks into the SDK's exported link
-interface. But `cmake/LudusConfig.cmake.in` only re-finds `volk` and
-`PkgConfig`/Wayland — it never `find_dependency(Threads)`. Any installed-SDK
-consumer that pulls `Ludus::FoundationProfiling` (directly or transitively via
-`Ludus::GraphicsRhi`) therefore fails at `find_package(Ludus)` unless it first
-resolves `Threads::Threads` itself. The engine's own `install-sdk` consumer
-self-test trips this too.
-
-**Exact engine change needed:** add a `Threads` dependency to the installed
-package config so consumers do not have to. In `cmake/LudusConfig.cmake.in`,
-alongside the existing `find_dependency(volk CONFIG)`:
-
-```cmake
-include(CMakeFindDependencyMacro)
-set(THREADS_PREFER_PTHREAD_FLAG ON)
-find_dependency(Threads)
-```
-
-**Sandbox workaround (in place):** `CMakeLists.txt` calls
-`find_package(Threads REQUIRED)` before `find_package(Ludus CONFIG REQUIRED)`,
-and `scripts/python/sandbox.py` installs the SDK via `scripts/build` +
-`cmake --install` (skipping the engine's own failing consumer self-test; the SDK
-install itself is complete and valid). Once the engine config adds
-`find_dependency(Threads)`, the workaround can be removed.
-
-## Honesty note on performance
-
-No frame-timing numbers are reported because no GPU run happened here. The single
-procedural fullscreen pass with two-octave noise and a handful of sine bands is
-inexpensive and should hit 60 fps at 1080p on typical integrated GPUs, but that
-must be **measured** on the target device before being claimed. If measurements
-on a given device justify it, add simpler quality settings (e.g. drop the second
-patch octave or the detuned wave bands) rather than assuming they are needed.
+The original SDK Threads workaround remains in the sandbox's CMake consumer.
+The current engine SDK packaging and external consumer checks pass; removing
+that compatibility workaround is separate from the rendering fix.

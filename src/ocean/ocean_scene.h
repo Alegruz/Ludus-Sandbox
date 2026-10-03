@@ -46,7 +46,7 @@ public:
     // between UI/config and the GPU-free settings. The scene never mutates it.
     explicit OceanScene(const ocean::SettingsStore& store) noexcept : mStore(&store) {}
 
-    bool Start() noexcept;
+    bool Start(rhi::BackendSelection selection = rhi::BackendSelection::Auto) noexcept;
     SceneState Tick() noexcept; // advance + render one frame
     void Shutdown() noexcept;
 
@@ -61,6 +61,10 @@ public:
     [[nodiscard]] ludus::foundation::uint32 GetFrames() const noexcept
     {
         return mFrames;
+    }
+    [[nodiscard]] rhi::StartupInfo GetStartupInfo() const noexcept
+    {
+        return mStartup;
     }
     [[nodiscard]] const ocean::SceneClock& GetClock() const noexcept
     {
@@ -105,6 +109,7 @@ private:
 
     ocean::SceneClock mClock;
     SceneState mState = SceneState::Stopped;
+    rhi::StartupInfo mStartup;
     rhi::StartupError mError = rhi::StartupError::None;
     foundation::uint64 mLastTick = 0;
     foundation::uint32 mFrames = 0;

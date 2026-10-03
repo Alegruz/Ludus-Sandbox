@@ -1,0 +1,253 @@
+{
+  "date": "2026-10-02",
+  "engine_revision": "10aab8df3cd5d5cdea64f66f9b0ef9732d5cef79",
+  "checks": {
+    "native_build": "warning-clean, Clang 18, installed SDK",
+    "native_tests": "81 logic checks, zero failures; CTest passed",
+    "sanitizers": "ASan/UBSan with leak detection: 81 checks, zero failures",
+    "format_tidy": "Pinned Clang 18; logic and changed browser files passed",
+    "shader_layout": "CPU/SPIR-V/WGSL/GLSL ES std140: 144 bytes; real spirv-val passed"
+  },
+  "browser": {
+    "kind": "Software GPU only; hardware and hosted acceptance unverified",
+    "rafDelayMs": 100,
+    "zipSha256": "1b30af11e68716fc4b87b15387abd69dd6e64567918f8c0ab44402c699f2c4e2",
+    "cases": [
+      {
+        "name": "webgpu: real ocean pixels, controls, pause, restart",
+        "status": "passed",
+        "pixelVariation": 55.640816409402234
+      },
+      {
+        "name": "webgl2: real ocean pixels, controls, pause, restart",
+        "status": "passed",
+        "pixelVariation": 55.640816409402234
+      },
+      {
+        "name": "WebGPU and WebGL 2 ocean orientation and palette agree",
+        "status": "passed",
+        "meanPixelDifference": 0
+      },
+      {
+        "name": "Auto fallback after missing",
+        "status": "passed",
+        "backend": "webgl2"
+      },
+      {
+        "name": "Auto fallback after adapter",
+        "status": "passed",
+        "backend": "webgl2"
+      },
+      {
+        "name": "Auto fallback after device",
+        "status": "passed",
+        "backend": "webgl2"
+      },
+      {
+        "name": "Auto fallback after surface",
+        "status": "passed",
+        "backend": "webgl2"
+      },
+      {
+        "name": "forced WebGPU fails explicitly without fallback",
+        "status": "passed"
+      },
+      {
+        "name": "both unavailable: readable narrow error and restart",
+        "status": "passed"
+      },
+      {
+        "name": "narrow responsive controls, DPR, iframe",
+        "status": "passed"
+      },
+      {
+        "name": "WebGL 2 loss, restart and repeated resize",
+        "status": "passed",
+        "loseContext": true
+      },
+      {
+        "name": "network failure index.js",
+        "status": "passed"
+      },
+      {
+        "name": "network failure index.wasm",
+        "status": "passed"
+      }
+    ],
+    "requests": [
+      {
+        "path": "/index.html",
+        "status": 200
+      },
+      {
+        "path": "/index.js",
+        "status": 200
+      },
+      {
+        "path": "/index.wasm",
+        "status": 200
+      },
+      {
+        "path": "/index.html",
+        "status": 200
+      },
+      {
+        "path": "/index.js",
+        "status": 200
+      },
+      {
+        "path": "/index.wasm",
+        "status": 200
+      },
+      {
+        "path": "/",
+        "status": 200
+      },
+      {
+        "path": "/index.js",
+        "status": 200
+      },
+      {
+        "path": "/index.wasm",
+        "status": 200
+      },
+      {
+        "path": "/",
+        "status": 200
+      },
+      {
+        "path": "/index.js",
+        "status": 200
+      },
+      {
+        "path": "/index.wasm",
+        "status": 200
+      },
+      {
+        "path": "/",
+        "status": 200
+      },
+      {
+        "path": "/index.js",
+        "status": 200
+      },
+      {
+        "path": "/index.wasm",
+        "status": 200
+      },
+      {
+        "path": "/",
+        "status": 200
+      },
+      {
+        "path": "/index.js",
+        "status": 200
+      },
+      {
+        "path": "/index.wasm",
+        "status": 200
+      },
+      {
+        "path": "/",
+        "status": 200
+      },
+      {
+        "path": "/index.js",
+        "status": 200
+      },
+      {
+        "path": "/index.wasm",
+        "status": 200
+      },
+      {
+        "path": "/",
+        "status": 200
+      },
+      {
+        "path": "/index.js",
+        "status": 200
+      },
+      {
+        "path": "/index.wasm",
+        "status": 200
+      },
+      {
+        "path": "/",
+        "status": 200
+      },
+      {
+        "path": "/index.js",
+        "status": 200
+      },
+      {
+        "path": "/index.wasm",
+        "status": 200
+      },
+      {
+        "path": "/iframe.html",
+        "status": 200
+      },
+      {
+        "path": "/index.html",
+        "status": 200
+      },
+      {
+        "path": "/index.js",
+        "status": 200
+      },
+      {
+        "path": "/index.wasm",
+        "status": 200
+      },
+      {
+        "path": "/",
+        "status": 200
+      },
+      {
+        "path": "/index.js",
+        "status": 200
+      },
+      {
+        "path": "/index.wasm",
+        "status": 200
+      },
+      {
+        "path": "/",
+        "status": 200
+      },
+      {
+        "path": "/",
+        "status": 200
+      },
+      {
+        "path": "/index.js",
+        "status": 200
+      }
+    ],
+    "launchArgs": [
+      "--enable-unsafe-webgpu",
+      "--enable-features=Vulkan",
+      "--use-webgpu-adapter=swiftshader",
+      "--use-angle=swiftshader",
+      "--use-vulkan=swiftshader",
+      "--disable-vulkan-surface",
+      "--enable-unsafe-swiftshader"
+    ],
+    "browserVersion": "140.0.7339.186"
+  },
+  "unverified": [
+    "physical GPU and flag-free compatibility",
+    "native Wayland/Vulkan presentation",
+    "hosted HTTPS/itch.io acceptance",
+    "interactive frame-rate and long-session resources",
+    "CI gates"
+  ],
+  "engine_ci": {
+    "commit": "10aab8df3cd5d5cdea64f66f9b0ef9732d5cef79",
+    "run": "https://github.com/Alegruz/Ludus/actions/runs/37086398722",
+    "build_time_budget": "passed",
+    "native_sdk": "passed",
+    "sanitizers": "passed",
+    "static_analysis": "in progress at publication"
+  }
+}

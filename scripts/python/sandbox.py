@@ -87,7 +87,7 @@ def write_user_presets(
         }
     ]
 
-    # Add a browser (Emscripten/WebGPU) preset when the web SDK and the engine's
+    # Add browser (Emscripten/WebGPU + WebGL 2) presets when the web SDK and the engine's
     # emscripten toolchain are present. Paths are discovered, never hardcoded.
     emscripten_toolchain = (
         ludus_source
@@ -114,9 +114,17 @@ def write_user_presets(
                     "CMAKE_FIND_ROOT_PATH": str(web_sdk_dir),
                     "LUDUS_SLANG_COMPILER": str(slang_compiler),
                     "LUDUS_SPIRV_VALIDATOR": str(spirv_validator),
+                    "LUDUS_SPIRV_CROSS": str(ludus_source / "out/shader-tools/spirv-cross/bin/spirv-cross"),
                 },
             }
         )
+        configure_presets.append({
+            "name": "web-emscripten-release",
+            "inherits": ["web-emscripten-development", "web-emscripten-release-base"],
+            "binaryDir": "${sourceDir}/out/build/web-emscripten-release",
+            "cacheVariables": {"CMAKE_BUILD_TYPE": "Release"},
+        })
+        build_presets.append({"name": "web-emscripten-release", "configurePreset": "web-emscripten-release"})
         build_presets.append(
             {
                 "name": "web-emscripten-development",
@@ -256,7 +264,7 @@ def install_ludus_web_sdk(ludus_source: Path) -> Path:
     expose a relocatable web SDK via ``install-sdk``; the supported path is
     ``web init`` (acquire emsdk) -> ``web build`` -> ``cmake --install`` of the
     web build tree (see fullscreen-rendering-handoff.md). Returns the prefix."""
-    web_preset = "web-emscripten-development"
+    web_preset = "web-emscripten-release"
 
     init_script = ludus_source / "scripts" / "init"
     build_script = ludus_source / "scripts" / "build"
@@ -302,6 +310,7 @@ def acquire_shader_tools(ludus_source: Path) -> tuple[Path, Path]:
 
     # Idempotent: re-running verifies the pinned digests without re-downloading.
     run([str(probe), "bootstrap"], cwd=ludus_source)
+    run([str(ludus_source / "scripts/bootstrap-spirv-cross")], cwd=ludus_source)
 
     tools = ludus_source / "out" / "shader-tools"
     slang = tools / "slang" / "bin" / "slangc"
@@ -315,6 +324,8 @@ def acquire_shader_tools(ludus_source: Path) -> tuple[Path, Path]:
             f"{tools / 'spirv-tools'}"
         )
 
+    if not (tools / "spirv-cross/bin/spirv-cross").is_file():
+        raise RuntimeError("Missing pinned SPIRV-Cross translator")
     return slang, validators[0]
 
 
@@ -366,8 +377,6 @@ def configure_sandbox_web(
     Emscripten cross-compilation must run under the emsdk's ``emcmake`` wrapper
     so emcc/the toolchain are discovered; the generated user preset supplies the
     toolchain file, prefix and shader tools."""
-    web_preset = "web-emscripten-development"
-
     cmake = ludus_source / "out" / "host-tools" / "venv" / "bin" / "cmake"
     emcmake = (
         ludus_source
@@ -383,17 +392,19 @@ def configure_sandbox_web(
     if not emcmake.is_file():
         raise RuntimeError(f"Expected emsdk emcmake does not exist: {emcmake}")
 
-    run(
-        [
-            str(emcmake),
-            str(cmake),
-            "--preset",
-            web_preset,
-            f"-DLUDUS_SLANG_COMPILER={slang_compiler}",
-            f"-DLUDUS_SPIRV_VALIDATOR={spirv_validator}",
-        ],
-        cwd=repo_root,
-    )
+    for web_preset in ("web-emscripten-development", "web-emscripten-release"):
+        run(
+            [
+                str(emcmake),
+                str(cmake),
+                "--preset",
+                web_preset,
+                f"-DLUDUS_SLANG_COMPILER={slang_compiler}",
+                f"-DLUDUS_SPIRV_VALIDATOR={spirv_validator}",
+            ],
+            cwd=repo_root,
+        )
+
 
 
 def init_command(args: argparse.Namespace) -> None:
@@ -439,7 +450,7 @@ def init_command(args: argparse.Namespace) -> None:
     elif args.with_web and not args.sdk_dir:
         web_sdk_dir = install_ludus_web_sdk(ludus_source)
     else:
-        candidate = ludus_source / "out" / "install" / "web-emscripten-development"
+        candidate = ludus_source / "out" / "install" / "web-emscripten-release"
         if candidate.is_dir():
             web_sdk_dir = candidate
 
@@ -485,6 +496,7 @@ def init_command(args: argparse.Namespace) -> None:
         print(f"Ludus web SDK:    {web_sdk_dir}")
     print(f"Slang compiler:   {slang_compiler}")
     print(f"SPIR-V validator: {spirv_validator}")
+    print(f"SPIRV-Cross:      {ludus_source / 'out/shader-tools/spirv-cross/bin/spirv-cross'}")
     print()
     print("The sandbox has been configured but not built.")
     print()

@@ -7,9 +7,10 @@ ocean playground, plus the required engine revision and SDK variant.
 
 | Item | Value | Where |
 | --- | --- | --- |
-| Ludus revision | `71e56a638044764344eedf9ac7bf9601195a2cfa` (PR #51, "Add public fullscreen rendering API and SDK shader tooling") | `config/ludus-version.txt` |
-| SDK variant | `linux-clang-development` (native) / `web-emscripten-development` (browser) | `scripts/python/sandbox.py` (`SDK_VARIANT`) |
+| Ludus revision | `10aab8df3cd5d5cdea64f66f9b0ef9732d5cef79` ([engine PR #56](https://github.com/Alegruz/Ludus/pull/56), WebGL 2 fallback) | `config/ludus-version.txt` |
+| SDK variant | `linux-clang-development` (native) / `web-emscripten-release` (browser SDK; development and release app presets) | `scripts/python/sandbox.py` (`SDK_VARIANT`) |
 | Slang compiler | `2026.1.2` | engine `config/shader_toolchain.json` |
+| SPIRV-Cross | `vulkan-sdk-1.4.313.0` (source archive + built binary digest verified) | engine `config/spirv_cross_toolchain.json` |
 | SPIR-V validator | `spirv-val` `2025.1~rc1` (digest-pinned) | engine `config/shader_toolchain.json` |
 
 The public fullscreen rendering API (`ludus/graphics/rhi/rhi.h` +
@@ -23,7 +24,8 @@ checks out exactly that revision.
   `spirv-val` requires glibc 2.38+), Clang/LLD 18, Python 3.10+.
 * **Native rendering** additionally needs a Wayland display and a Vulkan-capable
   GPU.
-* **Browser rendering** needs a WebGPU-capable browser (e.g. recent Chrome).
+* **Browser rendering** needs WebGPU or WebGL 2. Auto prefers WebGPU; use HTTPS or localhost
+  for WebGPU. Physical-device and hosted compatibility still need acceptance testing.
 
 > The engine's one-command bootstrap (`init.sh` → `scripts/python/sandbox.py`)
 > currently automates system prerequisites on apt-based Ubuntu/Debian only, and
@@ -42,8 +44,9 @@ checks out exactly that revision.
 1. Clones Ludus and checks out the pinned revision (or uses `--ludus-source
    <path>` for a local checkout).
 2. Runs the engine's `init.sh` and `scripts/shader-probe bootstrap` to acquire
-   the pinned, isolated Slang + SPIRV-Tools (digest-verified; no compiler or
-   validator is linked into the game).
+   the pinned, isolated Slang + SPIRV-Tools, then `scripts/bootstrap-spirv-cross`
+   acquires/builds the pinned translator. These are explicit network bootstrap
+   steps; no compiler, validator or translator is linked into the game.
 3. Installs the Ludus SDK (or uses `--sdk-dir <path>` /
    `LUDUS_SANDBOX_SDK_DIR` to reuse an already-installed SDK — no absolute path
    is hardcoded).
@@ -82,26 +85,33 @@ A native GUI framework is out of scope for this first slice, so the native build
 exercises the same settings through config/CLI (preset name, JSON file, and the
 `LUDUS_OCEAN_SETTINGS` / `LUDUS_OCEAN_FRAMES` environment variables).
 
-## 3. Browser build, run, and package (WebGPU)
+## 3. Browser build, run, and package (WebGPU + WebGL 2)
 
 ```bash
+./init.sh --with-web
 cmake --build --preset web-emscripten-development
 
 # The build directory IS the self-contained web package:
 #   index.html  index.js  index.wasm  (+ generated shader artifacts embedded)
 python3 -m http.server 8000 --bind 127.0.0.1 \
   --directory out/build/web-emscripten-development
-# Open http://127.0.0.1:8000/ in a WebGPU-capable browser.
+# Open http://127.0.0.1:8000/ (Auto), or append ?backend=webgl2 / ?backend=webgpu.
 ```
 
 To produce a distributable archive:
 
 ```bash
-( cd out/build/web-emscripten-development && zip -r ../../drift-ocean-web.zip index.html index.js index.wasm )
+cmake --build --preset web-emscripten-release
+./scripts/package-web
+# out/packages/drift-ocean-web-release.zip
 ```
 
 No shader compiler or network request is required during gameplay: the SPIR-V
-and WGSL are generated at build time and embedded in the wasm.
+WGSL and GLSL ES are generated at build time and embedded in the wasm. The
+Release packager checks every payload, hashes files, includes redistribution
+notices and records the exact engine/toolchain identity in `build-info.json`.
+It refuses debug wasm, developer paths, missing assets or layout mismatches.
+See [the browser harness](../tools/browser-tests/README.md) to test that exact ZIP.
 
 ## 4. GPU-free logic tests
 
@@ -154,7 +164,9 @@ cmake --build out/build/linux-clang-development
 * **native** — `./init.sh` then `cmake --build --preset linux-clang-development`
   and `ctest`; asserts the generated shader artifacts exist.
 * **web** — `./init.sh --with-web` then
-  `cmake --build --preset web-emscripten-development`; uploads the package.
+  `cmake --build --preset web-emscripten-release`, `scripts/package-web` and
+  pinned Playwright checks against the extracted ZIP; uploads the tested ZIP
+  and browser evidence.
 
 The `native`/`web` jobs install the engine's system prerequisites
 (`clang-18`, `lld-18`, `libwayland-dev`, `wayland-protocols`) before `./init.sh`
@@ -167,4 +179,8 @@ The shader artifacts rebuild automatically when `shaders/ocean.slang` (or its
 includes/defines/compiler/validator) change — this is handled by
 `ludus_compile_shader` via the generated depfiles. Changing the shader and
 rebuilding regenerates `ocean.vertex.spv`, `ocean.fragment.spv`, `ocean.wgsl`,
-and the `ocean.h` factory header the app includes.
+`ocean.vertex.glsl`, `ocean.fragment.glsl`, and the `ocean.h` factory header the app includes.
+
+For manual browser configuration, also set `LUDUS_SPIRV_CROSS` to the pinned
+verified binary produced by `scripts/bootstrap-spirv-cross`. Normal configure,
+build and gameplay remain offline after explicit initialization.

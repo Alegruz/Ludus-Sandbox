@@ -12,11 +12,11 @@ on:
 #                     links against the SDK and the Slang -> SPIR-V/WGSL build
 #                     works with the pinned toolchain (ubuntu-24.04 has the
 #                     glibc 2.38+ the pinned spirv-val needs).
-#   * web           - builds the browser (Emscripten/WebGPU) package and uploads
+#   * web           - builds the browser (WebGPU/WebGL 2) Release package and uploads
 #                     it as an artifact.
 #
-# GPU rendering / interactive 60fps / screenshots are NOT run here (headless
-# runners have no GPU); see docs/VALIDATION.md.
+# The browser job verifies real software-GPU pixels; physical GPU and hosted
+# acceptance remain separate. See docs/VALIDATION.md.
 
 permissions:
   contents: read
@@ -106,14 +106,13 @@ jobs:
           test -f "$shader_dir/ocean.wgsl"
 
   web:
-    name: Browser SDK build + package (WebGPU backend)
+    name: Browser SDK build + package (WebGPU + WebGL 2)
     needs: fast
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     # The engine exposes no relocatable web SDK via install-sdk, so the sandbox
     # builds the engine web tree and installs it to a prefix, then configures and
-    # builds the browser package (see scripts/python/sandbox.py). Verified green
-    # on CI, so this is a hard gate.
+    # builds and tests the exact Release package (see scripts/python/sandbox.py).
     env:
       CI: "true"
     steps:
@@ -142,23 +141,34 @@ jobs:
         run: ./init.sh --with-web
 
       - name: Build the browser ocean package
-        run: cmake --build --preset web-emscripten-development --parallel 2
+        run: cmake --build --preset web-emscripten-release --parallel 2
 
-      - name: Verify the self-contained web package
+      - name: Package and extract the exact Release payload
         run: |
-          pkg=out/build/web-emscripten-development
-          echo "Package dir: $pkg"
-          test -f "$pkg/index.html"
-          test -f "$pkg/index.js"
-          test -f "$pkg/index.wasm"
-          ls -la "$pkg"
+          ./scripts/package-web
+          python3 -m zipfile -e out/packages/drift-ocean-web-release.zip out/browser-qa/extracted
 
-      - name: Upload browser package artifact
-        uses: actions/upload-artifact@v4
+      - uses: actions/setup-node@v4
         with:
-          name: drift-ocean-web
-          path: |
-            out/build/web-emscripten-development/index.html
-            out/build/web-emscripten-development/index.js
-            out/build/web-emscripten-development/index.wasm
+          node-version: '22.16.0'
+          cache: npm
+          cache-dependency-path: tools/browser-tests/package-lock.json
+      - name: Install pinned browser test dependencies
+        working-directory: tools/browser-tests
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+      - name: Verify ocean pixels and fallback in the exact ZIP
+        working-directory: tools/browser-tests
+        run: npm test
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: drift-ocean-browser-evidence
+          path: out/browser-qa/results
+          if-no-files-found: warn
+      - uses: actions/upload-artifact@v4
+        with:
+          name: drift-ocean-web-release
+          path: out/packages/drift-ocean-web-release.zip
           if-no-files-found: error
