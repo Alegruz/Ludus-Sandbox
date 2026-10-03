@@ -191,3 +191,42 @@ Open `ludus.project.json` in the Editor and use **Release > Package Release**.
 See [RELEASING.md](../RELEASING.md) for preparation, package verification, and
 GitHub environment/variable setup. The release workflow tests the exact archive
 in Chromium before the separate upload job receives credentials.
+
+## Missing presets and local setup repair
+
+A fresh clone contains hidden base presets only. Run `./init.sh` to prepare the
+SDK/tools and generate ignored `CMakeUserPresets.json`. Setup runs the engine
+initializer noninteractively for the native Development preset. The generated
+user presets select the managed CMake for IDEs through `cmakeExecutable`, keeping
+machine paths out of tracked VS Code settings, and include a native test preset.
+
+Check setup after opening a clone, moving tools/SDKs, or updating the project:
+
+```bash
+python3 scripts/python/sandbox.py doctor --ludus-source /path/to/Ludus
+```
+
+Doctor is read-only and does not download, build, or configure. To repair using
+existing prepared tools and an installed SDK, without rebuilding the engine:
+
+```bash
+python3 scripts/python/sandbox.py repair --ludus-source /path/to/Ludus \
+  --sdk-dir /path/to/installed/development-sdk
+# Add --web-sdk-dir /path/to/installed/web-sdk to repair browser setup too.
+cmake --list-presets=all
+cmake --build --preset linux-clang-development
+ctest --preset linux-clang-development
+```
+
+Repair preserves custom presets and editor preferences, regenerates owned local
+presets, checks executable/SDK paths and actual CMake preset visibility, and
+configures with a fresh cache to remove old toolchain/SDK paths. Malformed custom
+JSON is reported for manual correction. Successful configure does not imply a
+completed build/test; run those last two commands after repair. Browser runtime
+validation still requires WebGPU and a browser.
+
+Setup regression tests use real CMake discovery with temporary SDK/tool fixtures:
+
+```bash
+python3 -m unittest discover -s scripts/python -p 'test_*.py'
+```

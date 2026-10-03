@@ -1,6 +1,7 @@
 """Release bootstrap wiring without downloading/building an engine."""
 import json
 import os
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -15,12 +16,30 @@ class ReleaseBootstrapTests(unittest.TestCase):
             root = Path(temp)
             source, project = root / 'engine', root / 'game'
             project.mkdir()
+            shutil.copyfile(Path(sandbox.__file__).resolve().parents[2] / 'CMakePresets.json',
+                            project / 'CMakePresets.json')
+            cmake = os.environ.get('LUDUS_TEST_CMAKE') or shutil.which('cmake')
+            if cmake is None:
+                self.skipTest('CMake is required for preset discovery')
+            for prefix in ('native-sdk', 'web-sdk'):
+                package = root / prefix / 'lib/cmake/Ludus'
+                package.mkdir(parents=True)
+                for name in ('LudusConfig.cmake', 'LudusTargets.cmake', 'LudusShaders.cmake'):
+                    (package / name).touch()
+            for name in ('slangc', 'spirv-val'):
+                (root / name).write_text('#!/bin/sh\nexit 0\n')
+                (root / name).chmod(0o755)
             for name in ('out/host-tools/venv/bin/cmake', 'out/host-tools/venv/bin/ninja',
                          'out/host-tools/bin/clang++',
+                         'out/shader-tools/spirv-cross/bin/spirv-cross',
                          'out/host-tools/emsdk/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake'):
                 path = source / name
                 path.parent.mkdir(parents=True, exist_ok=True)
-                path.touch()
+                if name.endswith('/cmake'):
+                    path.symlink_to(Path(cmake).resolve())
+                else:
+                    path.write_text('#!/bin/sh\nexit 0\n')
+                    path.chmod(0o755)
             sandbox.write_user_presets(project, source, root / 'native-sdk', root / 'slangc',
                                        root / 'spirv-val', root / 'web-sdk')
             obj = json.loads((project / 'CMakeUserPresets.json').read_text())

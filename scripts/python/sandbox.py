@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -53,11 +54,12 @@ def write_user_presets(
     ninja = tool_venv / "ninja"
     clangxx = tool_bin / "clang++"
 
-    for tool in (cmake, ninja, clangxx):
-        if not tool.is_file():
-            raise RuntimeError(
-                f"Expected Ludus-managed tool does not exist: {tool}"
-            )
+    for tool in (cmake, ninja, clangxx, slang_compiler, spirv_validator):
+        if not tool.is_file() or not os.access(tool, os.X_OK):
+            raise RuntimeError(f"Required executable is missing: {tool}")
+    validate_sdk(sdk_dir)
+    if web_sdk_dir is not None:
+        validate_sdk(web_sdk_dir)
 
     # The native SDK's LudusConfig.cmake does find_dependency(volk CONFIG), whose
     # package config files live in the engine's Conan output dir. The consumer
@@ -72,6 +74,7 @@ def write_user_presets(
         {
             "name": "linux-clang-development",
             "displayName": "Linux Clang Development",
+            "cmakeExecutable": str(cmake),
             "inherits": "linux-clang-development-base",
             "cacheVariables": {
                 "CMAKE_MAKE_PROGRAM": str(ninja),
@@ -103,11 +106,17 @@ def write_user_presets(
         / "Platform"
         / "Emscripten.cmake"
     )
-    if web_sdk_dir is not None and emscripten_toolchain.is_file():
+    if web_sdk_dir is not None and not emscripten_toolchain.is_file():
+        raise RuntimeError(f"Web SDK selected but toolchain is missing: {emscripten_toolchain}")
+    if web_sdk_dir is not None:
+        spirv_cross = ludus_source / "out/shader-tools/spirv-cross/bin/spirv-cross"
+        if not spirv_cross.is_file() or not os.access(spirv_cross, os.X_OK):
+            raise RuntimeError(f"Required SPIRV-Cross translator is missing: {spirv_cross}")
         configure_presets.append(
             {
                 "name": "web-emscripten-development",
                 "displayName": "Web Emscripten Development",
+                "cmakeExecutable": str(cmake),
                 "inherits": "web-emscripten-development-base",
                 "toolchainFile": str(emscripten_toolchain),
                 "cacheVariables": {
@@ -134,20 +143,149 @@ def write_user_presets(
             }
         )
 
-    presets = {
-        "version": 6,
-        "configurePresets": configure_presets,
-        "buildPresets": build_presets,
-    }
-
+    read_json_object(repo_root / ".vscode/settings.json")
+    test_presets = [{
+        "name": DEFAULT_PRESET,
+        "configurePreset": DEFAULT_PRESET,
+        "output": {"outputOnFailure": True},
+    }]
     path = repo_root / "CMakeUserPresets.json"
+    presets = read_json_object(path)
+    presets.setdefault("version", 6)
+    managed_names = {DEFAULT_PRESET, "web-emscripten-development", "web-emscripten-release"}
+    for key, generated in (("configurePresets", configure_presets),
+                           ("buildPresets", build_presets),
+                           ("testPresets", test_presets)):
+        existing = presets.get(key, [])
+        if not isinstance(existing, list) or any(not isinstance(item, dict) for item in existing):
+            raise RuntimeError(f"Invalid {key} in {path}; repair it before running setup")
+        presets[key] = [item for item in existing if item.get("name") not in managed_names] + generated
+    write_json_object(path, presets)
+    write_editor_settings(repo_root)
+    check_setup(repo_root, ludus_source)
+    print(f"Generated and checked user presets: {path}")
 
-    path.write_text(
-        json.dumps(presets, indent=2) + "\n",
-        encoding="utf-8",
-    )
 
-    print(f"Generated user presets: {path}")
+def read_json_object(path: Path) -> dict:
+    if not path.exists():
+        return {}
+    try:
+        result = json.loads(path.read_text(encoding="utf-8"))
+    except (ValueError, OSError) as error:
+        raise RuntimeError(f"Cannot read {path}; fix its JSON before setup: {error}") from error
+    if not isinstance(result, dict):
+        raise RuntimeError(f"Expected a JSON object in {path}")
+    return result
+
+
+def write_json_object(path: Path, value: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(path.name + ".tmp")
+    temporary.write_text(json.dumps(value, indent=2) + "\n", encoding="utf-8")
+    temporary.replace(path)
+
+
+def validate_sdk(prefix: Path) -> None:
+    package = prefix / "lib" / "cmake" / "Ludus"
+    for name in ("LudusConfig.cmake", "LudusTargets.cmake", "LudusShaders.cmake"):
+        if not (package / name).is_file():
+            raise RuntimeError(f"SDK is incomplete or outdated: missing {package / name}; install the pinned SDK")
+
+
+def write_editor_settings(repo_root: Path) -> None:
+    path = repo_root / ".vscode" / "settings.json"
+    settings = read_json_object(path)
+    if settings.get("cmake.useCMakePresets") == "always":
+        return
+    settings["cmake.useCMakePresets"] = "always"
+    write_json_object(path, settings)
+
+
+def check_setup(repo_root: Path, ludus_source: Path) -> None:
+    """Read-only preflight; CMake owns include/inheritance/condition validation."""
+    cmake = ludus_source / "out" / "host-tools" / "venv" / "bin" / "cmake"
+    if not cmake.is_file() or not os.access(cmake, os.X_OK):
+        raise RuntimeError(f"Missing managed CMake: {cmake}; run ./init.sh first")
+    presets_path = repo_root / "CMakeUserPresets.json"
+    if not presets_path.is_file():
+        raise RuntimeError("CMakeUserPresets.json is missing; run ./init.sh or sandbox.py repair --ludus-source <checkout>")
+    presets = read_json_object(presets_path)
+    for key in ("configurePresets", "buildPresets", "testPresets"):
+        items = presets.get(key, [])
+        if not isinstance(items, list) or any(not isinstance(item, dict) for item in items):
+            raise RuntimeError(f"Invalid {key} in {presets_path}; fix its JSON before repair")
+    native = next((item for item in presets.get("configurePresets", [])
+                   if item.get("name") == DEFAULT_PRESET), None)
+    if native is None:
+        raise RuntimeError("Native configure preset is missing; run sandbox.py repair --ludus-source <checkout>")
+    # Check every generated preset's machine paths, including an enabled web SDK.
+    for preset in presets.get("configurePresets", []):
+        if preset.get("name") not in (DEFAULT_PRESET, "web-emscripten-development"):
+            continue
+        if preset.get("cmakeExecutable") != str(cmake):
+            raise RuntimeError("IDE CMake executable is stale; run repair")
+        cache = preset.get("cacheVariables", {})
+        if not isinstance(cache, dict) or any(not isinstance(cache.get(key, ""), str) for key in (
+                "CMAKE_MAKE_PROGRAM", "LUDUS_SLANG_COMPILER", "LUDUS_SPIRV_VALIDATOR",
+                "CMAKE_PREFIX_PATH", "CMAKE_CXX_COMPILER")):
+            raise RuntimeError("Generated preset has invalid tool/path values; run repair")
+        for key in ("CMAKE_MAKE_PROGRAM", "LUDUS_SLANG_COMPILER", "LUDUS_SPIRV_VALIDATOR"):
+            tool = Path(cache.get(key, ""))
+            if not tool.is_file() or not os.access(tool, os.X_OK):
+                raise RuntimeError(f"{preset['name']}: missing executable {key}: {tool}; run repair")
+        prefixes = cache.get("CMAKE_PREFIX_PATH", "").split(";")
+        validate_sdk(Path(prefixes[0]))
+        for prefix in prefixes:
+            if not prefix or not Path(prefix).is_dir():
+                raise RuntimeError(f"Missing SDK/dependency prefix: {prefix}; run repair")
+        if preset["name"] == DEFAULT_PRESET:
+            compiler = Path(cache.get("CMAKE_CXX_COMPILER", ""))
+            if not compiler.is_file() or not os.access(compiler, os.X_OK):
+                raise RuntimeError(f"Missing native compiler: {compiler}; run repair")
+        else:
+            if not Path(preset.get("toolchainFile", "")).is_file():
+                raise RuntimeError("Web toolchain is missing; run repair with an installed web toolchain")
+            translator = Path(cache.get("LUDUS_SPIRV_CROSS", ""))
+            if not translator.is_file() or not os.access(translator, os.X_OK):
+                raise RuntimeError(f"Web SPIRV-Cross translator is missing: {translator}; run repair")
+    settings = read_json_object(repo_root / ".vscode" / "settings.json")
+    if settings.get("cmake.useCMakePresets") != "always":
+        raise RuntimeError("VS Code CMake settings are stale; run sandbox.py repair --ludus-source <checkout>")
+    expected = {DEFAULT_PRESET}
+    if any(item.get("name") == "web-emscripten-development" for item in presets.get("configurePresets", [])):
+        expected.update(("web-emscripten-development", "web-emscripten-release"))
+    for kind in ("configure", "build", "test"):
+        result = subprocess.run([str(cmake), f"--list-presets={kind}"], cwd=repo_root,
+                                text=True, capture_output=True, timeout=30)
+        if result.returncode:
+            raise RuntimeError(f"Invalid CMake presets: {result.stderr.strip()}; run repair")
+        visible = set(re.findall(r'^  "([^"\n]+)"', result.stdout, re.MULTILINE))
+        required = {DEFAULT_PRESET} if kind == "test" else expected
+        if not required <= visible:
+            raise RuntimeError(f"Missing selectable {kind} presets: {', '.join(sorted(required - visible))}; run repair")
+    print("Setup checks passed: selectable presets, SDKs, tools and VS Code CMake settings.")
+
+
+def local_setup_command(args: argparse.Namespace) -> None:
+    """Check or repair using existing artifacts, without fetching/building Ludus."""
+    repo_root = Path(__file__).resolve().parents[2]
+    ludus_source = Path(args.ludus_source).expanduser().resolve()
+    if args.command == "doctor":
+        check_setup(repo_root, ludus_source)
+        return
+    sdk_dir = Path(args.sdk_dir).expanduser().resolve() if args.sdk_dir else ludus_source / "out/install" / DEFAULT_PRESET
+    web_sdk_dir = Path(args.web_sdk_dir).expanduser().resolve() if args.web_sdk_dir else None
+    slang = ludus_source / "out/shader-tools/slang/bin/slangc"
+    validators = sorted((ludus_source / "out/shader-tools/spirv-tools").glob("**/spirv-val"))
+    if not validators:
+        raise RuntimeError("Pinned spirv-val is missing; run ./init.sh first")
+    # Validate settings before modifying presets; never discard invalid custom JSON.
+    read_json_object(repo_root / ".vscode/settings.json")
+    write_user_presets(repo_root, ludus_source, sdk_dir, slang, validators[0], web_sdk_dir)
+    configure_sandbox(repo_root, ludus_source, DEFAULT_PRESET, slang, validators[0])
+    if web_sdk_dir is not None:
+        configure_sandbox_web(repo_root, ludus_source, slang, validators[0])
+    check_setup(repo_root, ludus_source)
 
 
 def read_ludus_revision(repo_root: Path) -> str:
@@ -217,7 +355,10 @@ def initialize_ludus(ludus_source: Path) -> None:
     if not init_script.is_file():
         raise RuntimeError(f"Missing Ludus init script: {init_script}")
 
-    run([str(init_script)], cwd=ludus_source)
+    # CI disables interactive setup on current engines and remains compatible
+    # with older engine revisions that predate the --cli option.
+    run([str(init_script), DEFAULT_PRESET, "--preset-only"], cwd=ludus_source,
+        env={**os.environ, "CI": "true"})
 
 
 def install_ludus_sdk(
@@ -276,7 +417,8 @@ def install_ludus_web_sdk(ludus_source: Path) -> Path:
     # The engine routes web-emscripten-* presets to its browser pipeline. Acquire
     # the pinned emsdk and configure (init --preset-only), then build the web
     # targets in-tree. The preset is passed positionally.
-    run([str(init_script), web_preset, "--preset-only"], cwd=ludus_source)
+    run([str(init_script), web_preset, "--preset-only"], cwd=ludus_source,
+        env={**os.environ, "CI": "true"})
     run([str(build_script), web_preset], cwd=ludus_source)
 
     # Install the built web tree to a prefix we can point CMAKE_PREFIX_PATH at.
@@ -355,6 +497,7 @@ def configure_sandbox(
     run(
         [
             str(cmake),
+            "--fresh",
             "--preset",
             preset,
             # The ludus_compile_shader helper needs the pinned host tools. They
@@ -399,6 +542,7 @@ def configure_sandbox_web(
             [
                 str(emcmake),
                 str(cmake),
+                "--fresh",
                 "--preset",
                 web_preset,
                 f"-DLUDUS_SLANG_COMPILER={slang_compiler}",
@@ -458,6 +602,7 @@ def init_command(args: argparse.Namespace) -> None:
         if candidate.is_dir():
             web_sdk_dir = candidate
 
+    read_json_object(repo_root / ".vscode/settings.json")
     write_user_presets(
         repo_root=repo_root,
         ludus_source=ludus_source,
@@ -527,6 +672,7 @@ def build_parser() -> argparse.ArgumentParser:
     init_parser.add_argument(
         "--preset",
         default=DEFAULT_PRESET,
+        choices=[DEFAULT_PRESET],
         help=f"CMake/Ludus preset / SDK variant to use (default: {DEFAULT_PRESET}).",
     )
 
@@ -562,6 +708,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     init_parser.add_argument("--web-release", action="store_true", help="Prepare browser Release inputs (implies --with-web).")
     init_parser.set_defaults(func=init_command)
+    for command in ("doctor", "repair"):
+        local_parser = subparsers.add_parser(command, help=f"{command.title()} local setup without downloads or engine builds.")
+        local_parser.add_argument("--ludus-source", required=True, help="Existing prepared Ludus checkout.")
+        local_parser.add_argument("--sdk-dir", default=os.environ.get("LUDUS_SANDBOX_SDK_DIR"))
+        local_parser.add_argument("--web-sdk-dir", default=os.environ.get("LUDUS_SANDBOX_WEB_SDK_DIR"))
+        local_parser.set_defaults(func=local_setup_command)
 
     return parser
 
@@ -578,7 +730,7 @@ def main() -> int:
             file=sys.stderr,
         )
         return error.returncode
-    except RuntimeError as error:
+    except (RuntimeError, OSError, ValueError, subprocess.TimeoutExpired) as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
 
