@@ -119,6 +119,8 @@ try {
   const reference={};
   for(const backend of ['webgpu','webgl2']) await run(backend+': real ocean pixels, controls, pause, restart',async entry=>{
     const c=await context();const page=await c.newPage();await page.goto(base+'/index.html?backend='+backend);await playing(page);
+    await page.locator('#mode').click();
+    await until(()=>page.locator('#game-status').getAttribute('data-enabled'),v=>v==='false','tuning mode');
     assert.equal(await data(page,'backend'),backend);
     reference[backend]=await frozen(page);entry.pixelVariation=variation(reference[backend]);
     assert(entry.pixelVariation>8,'Ocean is a flat clear color');
@@ -168,6 +170,8 @@ try {
   });
   await run('narrow responsive controls, DPR, iframe',async()=>{
     const c=await context('missing',{viewport:{width:320,height:360},deviceScaleFactor:1.5});const page=await c.newPage();await page.goto(base+'/');await playing(page);
+    await page.locator('#mode').click();
+    await until(()=>page.locator('#game-status').getAttribute('data-enabled'),v=>v==='false','narrow tuning mode');
     await page.locator('#panel summary').click();
     const status=await page.locator('#status-region').boundingBox(),panel=await page.locator('#panel').boundingBox();
     assert(status.y+status.height<=panel.y&&panel.x+panel.width<=320&&panel.y+panel.height<=360,'Responsive panel overlaps status or escapes viewport');

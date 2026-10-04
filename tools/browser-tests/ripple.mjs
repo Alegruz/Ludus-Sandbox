@@ -64,6 +64,7 @@ try {
       assert.equal(await page.locator('#status').getAttribute('data-backend'), backend);
       const initial = await state(page);
       assert.equal(Number(initial.placements), 0);
+      assert(await page.locator('#panel').isHidden(), 'Tuning controls obscure the game');
       const viewHeight = Math.max(90, 70 / (viewport.width / viewport.height));
       const x = viewport.width / 2 - 5 * viewport.height / viewHeight;
       const y = viewport.height / 2 + 22 * viewport.height / viewHeight;
@@ -146,12 +147,16 @@ try {
         const py = size.height / 2 - worldY * size.height / height;
         if (mobile) await page.touchscreen.tap(px, py); else await page.mouse.click(px, py);
       };
-      await placeWorld(0, 0);
-      await until(() => state(page), s => Number(s.result) === 5, 'solid rock rejects ripple origin');
-      const rejected = await state(page);
-      assert.equal(Number(rejected.placements), 0);
-      assert.equal(Number(rejected.rings), 0);
-      assert.equal(Number(rejected.cooldown), 0, 'Rock placement consumed cooldown');
+      const clearDock = async (worldX, worldY) => {
+        const size = page.viewportSize();
+        const scale = size.height / Math.max(90, 70 / (size.width / size.height));
+        const box = await page.locator('#status-region').boundingBox();
+        const dock = {x: size.width / 2 + worldX * scale, y: size.height / 2 - worldY * scale, radius: 5 * scale};
+        const closestX = Math.max(box.x, Math.min(dock.x, box.x + box.width));
+        const closestY = Math.max(box.y, Math.min(dock.y, box.y + box.height));
+        assert(Math.hypot(dock.x - closestX, dock.y - closestY) > dock.radius,
+          'HUD obscures the dock at ' + JSON.stringify(size));
+      };
       const steer = async (waypoints, terminal, timeout = 180000) => {
         let waypoint = 0;
         const deadline = Date.now() + timeout;
@@ -176,27 +181,86 @@ try {
         }
         throw Error('Timeout: complete course with pointer ripples');
       };
+      assert.equal((await state(page)).course, '1');
+      assert.equal(await page.evaluate(() => Module._DriftNextCourse()), 0, 'Playing cannot advance');
+      assert(await page.locator('#game-next').isHidden());
+      const learned = await steer([{x: 8, y: 10}], 'arrived');
+      assert.equal(Number(learned.docking), 1);
+      assert(Math.hypot(Number(learned.x) - 8, Number(learned.y) - 10) <= 3.001);
+      await clearDock(8, 10);
+      await page.screenshot({path: resolve(output, name + '-first-course.png')});
+      await page.evaluate(() => Module._OceanSetPaused(1));
+      await until(() => state(page), s => s.paused === 'true', 'pause before Next');
+      await page.locator('#game-next').dblclick();
+      await until(() => state(page), s => s.course === '2' && s.phase === 'playing', 'next level');
+      assert.equal((await state(page)).y, '-22');
+      assert.equal((await state(page)).paused, 'false', 'Next left the new course paused');
+      assert(await page.locator('#course-error').isHidden(), 'Rapid Next clicks produced a spurious error');
+      assert.equal(Number((await state(page)).placements), 0, 'Transition emitted a ripple');
+      console.log(name + ': first course complete');
+      await placeWorld(0, 0);
+      await until(() => state(page), s => Number(s.result) === 5, 'solid rock rejects ripple origin');
+      const rejected = await state(page);
+      assert.equal(Number(rejected.placements), 0);
+      assert.equal(Number(rejected.rings), 0);
+      assert.equal(Number(rejected.cooldown), 0, 'Rock placement consumed cooldown');
       // A straight approach hits the rock; terminal input freezes until Retry.
       const crashed = await steer([{x: 0, y: 24}], 'crashed');
       assert.equal(Number(crashed.crash), 1);
+      assert.equal(await page.evaluate(() => Module._DriftNextCourse()), 0, 'Crashed cannot advance');
+      assert(await page.locator('#game-next').isHidden());
       await placeWorld(-5, -8); await delay(250);
       assert.equal((await state(page)).ticks, crashed.ticks);
       assert.equal((await state(page)).placements, crashed.placements);
       await page.screenshot({path: resolve(output, name + '-crashed.png')});
       await page.locator('#game-reset').click();
       await until(() => state(page), s => s.phase === 'playing' && Number(s.placements) === 0, 'retry after crash');
+      assert.equal((await state(page)).course, '2', 'Retry changed the course');
       const arrived = await steer([{x: 12, y: -22}, {x: 12, y: 24}, {x: 0, y: 24}], 'arrived');
       assert.equal(Number(arrived.docking), 1);
       assert(Math.hypot(Number(arrived.x), Number(arrived.y) - 24) <= 3.001, 'Hull is not contained in the dock');
       assert(Math.hypot(Number(arrived.vx), Number(arrived.vy)) <= 1.5, 'Arrived too fast');
+      await clearDock(0, 24);
       await page.screenshot({path: resolve(output, name + '-arrived.png')});
       await page.evaluate(() => Module._OceanRestart());
       await until(() => page.locator('#status').getAttribute('data-state'), s => s === 'playing', 'terminal graphics restart');
       assert.equal((await state(page)).phase, 'arrived');
+      assert.equal((await state(page)).course, '2', 'Graphics restart changed the course');
+      await page.locator('#game-next').click();
+      await until(() => state(page), s => s.course === '3' && s.phase === 'playing', 'channel level');
+      assert.equal(Number((await state(page)).y), -28);
+      assert.equal(Number((await state(page)).rings), 0);
       await page.locator('#game-reset').click();
-      await until(() => state(page), s => s.phase === 'playing' && Number(s.placements) === 0, 'retry after arrival');
+      await until(() => state(page), s => s.course === '3' && Number(s.placements) === 0, 'channel retry');
+      console.log(name + ': rock course complete');
+      // Portrait and landscape must keep the authored hazards/dock in view.
+      await page.setViewportSize(viewport);
+      await delay(200);
+      await clearDock(10, 29);
+      const channel = await steer([{x: 12, y: -28}, {x: 12, y: -12}, {x: 0, y: -2},
+        {x: -12, y: 7}, {x: -12, y: 12}, {x: 12, y: 18}, {x: 10, y: 29}], 'arrived', 300000);
+      assert.equal(channel.complete, 'true');
+      assert(Math.hypot(Number(channel.x) - 10, Number(channel.y) - 29) <= 3.001);
+      assert(Math.hypot(Number(channel.vx), Number(channel.vy)) <= 1.5);
+      assert.equal(await page.locator('#game-next').textContent(), 'Play again');
+      assert.match(await page.locator('#game-status').textContent(), /All three courses complete/);
+      await clearDock(10, 29);
+      await page.screenshot({path: resolve(output, name + '-complete.png')});
+      await page.evaluate(() => Module._OceanRestart());
+      await until(() => page.locator('#status').getAttribute('data-state'), s => s === 'playing', 'complete graphics restart');
+      await waitFrames(page, 3);
+      assert.equal((await state(page)).complete, 'true');
+      await page.locator('#game-next').click();
+      await until(() => state(page), s => s.course === '1' && s.phase === 'playing', 'play again');
+      const replay = await state(page);
+      assert.equal(Number(replay.x), 0); assert.equal(Number(replay.y), -22);
+      assert.equal(Number(replay.placements), 0); assert.equal(Number(replay.rings), 0);
+      assert.equal(Number(replay.waves), 0); assert.equal(Number(replay.vortices), 0);
+      assert.equal(replay.complete, 'false');
+      assert(await page.locator('#game-next').isHidden());
       assert.equal(errors.length, 0, errors.join('\n'));
-      report.cases.push({name, status: 'passed', push: frozen, crashed, arrived, errors});
+      console.log(name + ': all courses and replay passed');
+      report.cases.push({name, status: 'passed', push: frozen, learned, crashed, arrived, channel, replay, errors});
       await context.close(); activePage = undefined;
     }
   }

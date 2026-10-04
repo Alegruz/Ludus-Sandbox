@@ -650,6 +650,121 @@ void TestDocking() noexcept
     CHECK(game.TerminalTransitions() == 1);
 }
 
+// Earn arrivals through the same placements available to players. This checks
+// that authored routes can be sailed and braked with the actual fixed-tick rules.
+bool Sail(RippleGame& game, const Point* waypoints, usize count) noexcept
+{
+    usize waypoint = 0;
+    for (uint32 tick = 0; tick < 18000 && game.Phase() == GamePhase::Playing; ++tick)
+    {
+        const auto& boat = game.GetBoat();
+        const Point delta{waypoints[waypoint].X - boat.Position.X, waypoints[waypoint].Y - boat.Position.Y};
+        const float64 distance = std::hypot(delta.X, delta.Y);
+        if (distance < 2.5 && waypoint + 1 < count)
+        {
+            ++waypoint;
+            continue;
+        }
+        const float64 speed = distance * 0.6 < 3.2 ? distance * 0.6 : 3.2;
+        const Point error{(distance > 0.01 ? delta.X / distance * speed : 0.0) - boat.Velocity.X,
+                          (distance > 0.01 ? delta.Y / distance * speed : 0.0) - boat.Velocity.Y};
+        const float64 magnitude = std::hypot(error.X, error.Y);
+        if (game.CooldownFraction() == 0.0 && magnitude > 1.1)
+        {
+            (void)game.Place(
+                {boat.Position.X - error.X / magnitude * 3.0, boat.Position.Y - error.Y / magnitude * 3.0});
+        }
+        game.Tick();
+    }
+    return game.Phase() == GamePhase::Arrived;
+}
+
+void TestCampaign() noexcept
+{
+    LevelDefinition output = RescueLevel();
+    CHECK(!TryGetCourseLevel(kCourseCount, output));
+    CHECK(output.RockCount == 1 && Near(output.DockCenter.Y, 24.0));
+    RippleGame game;
+    for (uint32 course = 0; course < kCourseCount; ++course)
+    {
+        CHECK(TryGetCourseLevel(course, output));
+        CHECK(game.LoadLevel(output));
+        CHECK(!game.CampaignActive());
+        CHECK(output.Id == course + 1 && output.BoundaryHazard);
+    }
+    CHECK(game.StartCampaign());
+    CHECK(game.CampaignActive() && game.CourseIndex() == 0 && !game.CampaignComplete());
+    CHECK(game.Place({-3.0, -22.0}) == PlacementResult::Queued);
+    CHECK(!game.NextCourse());
+    game.Tick();
+    CHECK(game.Placements() == 1); // Failed transition preserves queued input.
+    game.Reset();
+    CHECK(game.CampaignActive() && game.CourseIndex() == 0 && game.ActiveRipples() == 0);
+    auto invalid = game.GetLevel();
+    invalid.Id = 0;
+    CHECK(!game.LoadLevel(invalid));
+    CHECK(game.CampaignActive() && game.CourseIndex() == 0);
+
+    const Point first[] = {{8.0, 10.0}};
+    CHECK(Sail(game, first, 1));
+    CHECK(!game.CampaignComplete() && game.TerminalTransitions() == 1);
+    game.Reset(); // Retry after arrival stays on the same course.
+    CHECK(game.Phase() == GamePhase::Playing && game.CourseIndex() == 0);
+    CHECK(Sail(game, first, 1));
+    PhysicsSettings physics;
+    physics.PushSpeed = 4.0;
+    CHECK(game.SetPhysics(physics));
+    CHECK(game.NextCourse());
+    CHECK(game.CourseIndex() == 1 && Near(game.GetPhysics().PushSpeed, 2.5));
+    CHECK(game.Ticks() == 0 && game.Placements() == 0 && game.Contacts() == 0);
+    CHECK(game.ActiveRipples() == 0 && Near(game.Alpha(), 0.0) && Near(game.DockProgress(), 0.0));
+    const Point straight[] = {{0.0, 24.0}};
+    CHECK(!Sail(game, straight, 1));
+    CHECK(game.Phase() == GamePhase::Crashed && !game.NextCourse());
+    game.Reset();
+    CHECK(game.CourseIndex() == 1 && Near(game.GetBoat().Position.Y, -22.0));
+    const Point second[] = {{12.0, -22.0}, {12.0, 24.0}, {0.0, 24.0}};
+    CHECK(Sail(game, second, 3));
+    CHECK(game.NextCourse());
+    CHECK(game.CourseIndex() == 2 && game.GetLevel().RockCount == 3);
+    CHECK(Near(game.GetBoat().Position.Y, -28.0));
+    const Point channel[] = {
+        {12.0, -28.0},
+        {12.0, -12.0},
+        {0.0, -2.0},
+        {-12.0, 7.0},
+        {-12.0, 12.0},
+        {12.0, 18.0},
+        {10.0, 29.0},
+    };
+    CHECK(Sail(game, channel, 7));
+    CHECK(game.CampaignComplete() && game.TerminalTransitions() == 1);
+    const auto ticks = game.Ticks();
+    CHECK(!game.NextCourse());
+    game.Advance(1.0, true);
+    CHECK(game.CampaignComplete() && game.Ticks() == ticks);
+    using namespace ludus::sandbox::ocean;
+    const auto finalSnapshot = BuildUniforms(DefaultSettings(), {}, 960, 540, game, false);
+    CHECK(finalSnapshot.LevelInfo[0] == 3.0F && finalSnapshot.LevelInfo[1] == 2.0F &&
+          finalSnapshot.Rocks[2][2] == 4.0F);
+    game.Reset();
+    CHECK(game.CourseIndex() == 2 && !game.CampaignComplete());
+    CHECK(game.BeginStroke({15.0, -20.0}) == PlacementResult::Queued);
+    (void)game.MoveStroke({20.0, -20.0});
+    CHECK(game.ActiveSurfaceEffects(SurfaceKind::Wave) == 1);
+    game.Advance(kTickSeconds * 0.5, true);
+    CHECK(game.StartCampaign());
+    CHECK(game.CourseIndex() == 0 && game.ActiveSurfaceEffects(SurfaceKind::Wave) == 0);
+    CHECK(game.ActiveSurfaceEffects(SurfaceKind::Vortex) == 0 && game.ActiveRipples() == 0);
+    CHECK(Near(game.Alpha(), 0.0) && Near(game.GetBoat().Velocity.X, 0.0));
+    game.Tick();
+    CHECK(game.Placements() == 0); // A stroke from the previous run cannot leak.
+    const auto replaySnapshot = BuildUniforms(DefaultSettings(), {}, 960, 540, game, false);
+    CHECK(replaySnapshot.LevelInfo[1] == 0.0F && replaySnapshot.Rocks[2][2] == 0.0F);
+    CHECK(game.LoadLevel(RescueLevel()));
+    CHECK(!game.CampaignActive() && !game.NextCourse());
+}
+
 } // namespace
 
 int main()
@@ -666,6 +781,7 @@ int main()
     TestRockOrigins();
     TestSweptHazardsAndRetry();
     TestDocking();
+    TestCampaign();
     std::printf("Ripple game: %d checks, %d failures\n", gChecks, gFailures);
     return gFailures == 0 ? 0 : 1;
 }
