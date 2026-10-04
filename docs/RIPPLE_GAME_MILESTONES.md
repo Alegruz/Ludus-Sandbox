@@ -1,5 +1,8 @@
 # Drift ripple game milestones
 
+> Current courses use [vertical river runs](RIVER_RUNS.md), added October 4, 2026.
+> The original whole-screen courses below are historical.
+
 Status: M0–M3 gameplay implemented, October 3, 2026. Physical-device and
 fresh-player acceptance remain open. Sequence is by working acceptance
 gates, not calendar estimates: jam deadline and remaining developer hours have

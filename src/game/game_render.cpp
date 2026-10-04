@@ -5,16 +5,31 @@
 
 namespace ludus::sandbox::game
 {
+Camera
+PresentationCamera(uint32 width, uint32 height, const RippleGame& simulation, bool paused, bool gameplay) noexcept
+{
+    const auto& boat = simulation.GetBoat();
+    const float64 alpha = paused || simulation.Phase() != GamePhase::Playing ? 1.0 : simulation.Alpha();
+    const Point position{boat.PreviousPosition.X + (boat.Position.X - boat.PreviousPosition.X) * alpha,
+                         boat.PreviousPosition.Y + (boat.Position.Y - boat.PreviousPosition.Y) * alpha};
+    return gameplay ? FollowCamera(width, height, simulation.GetLevel(), position)
+                    : FitCamera(width, height, simulation.GetLevel().HalfExtent);
+}
+
 ocean::OceanUniforms BuildUniforms(const ocean::OceanSettings& settings,
                                    const ocean::SceneClock& clock,
                                    uint32 width,
                                    uint32 height,
                                    const RippleGame& simulation,
-                                   bool paused) noexcept
+                                   bool paused,
+                                   bool gameplay) noexcept
 {
     auto u = ocean::BuildUniforms(settings, clock, width, height);
     const auto& level = simulation.GetLevel();
-    const auto camera = game::FitCamera(width, height, level.HalfExtent);
+    const auto camera = PresentationCamera(width, height, simulation, paused, gameplay);
+    u.CameraX = static_cast<float32>(camera.Center.X);
+    u.CameraY = static_cast<float32>(camera.Center.Y);
+    u.RiverTime = static_cast<float32>(static_cast<float64>(simulation.Ticks()) * kTickSeconds);
     u.WorldView[0] = static_cast<float32>(camera.Width);
     u.WorldView[1] = static_cast<float32>(camera.Height);
     const auto& boat = simulation.GetBoat();
@@ -23,7 +38,7 @@ ocean::OceanUniforms BuildUniforms(const ocean::OceanSettings& settings,
     u.BoatInfo[1] = static_cast<float32>(boat.PreviousPosition.Y + (boat.Position.Y - boat.PreviousPosition.Y) * alpha);
     u.BoatInfo[2] = static_cast<float32>(boat.Heading);
     u.BoatInfo[3] = static_cast<float32>(game::kBoatRadius);
-    u.GameInfo[0] = 1.0F;
+    u.GameInfo[0] = gameplay ? 1.0F : 0.0F;
     u.GameInfo[2] = static_cast<float32>(simulation.CooldownFraction());
     u.GameInfo[3] = static_cast<float32>(boat.ContactFlash / 0.18);
     u.BoatMotion[0] = static_cast<float32>(boat.Velocity.X);
@@ -47,7 +62,7 @@ ocean::OceanUniforms BuildUniforms(const ocean::OceanSettings& settings,
     u.GameInfo[1] = static_cast<float32>(count);
     u.FlowInfo[0] = 16.0F;
     u.FlowInfo[1] = 24.0F;
-    u.FlowInfo[2] = simulation.GetWater().Active() ? 10.0F : 0.0F;
+    u.FlowInfo[2] = simulation.GetWater().Active() || (gameplay && level.RiverSpeed > 0.0) ? 10.0F : 0.0F;
     u.FlowInfo[3] = 3.0F;
     const auto signedByte = [](float64 value, float64 range) noexcept {
         return static_cast<uint32>(std::clamp(std::round(value / range * 127.0 + 128.0), 1.0, 255.0));
@@ -62,10 +77,11 @@ ocean::OceanUniforms BuildUniforms(const ocean::OceanSettings& settings,
             const Point position{((static_cast<float64>(x) + 0.5) / 16.0 * 2.0 - 1.0) * level.HalfExtent.X,
                                  ((static_cast<float64>(y) + 0.5) / 24.0 * 2.0 - 1.0) * level.HalfExtent.Y};
             const auto water = simulation.GetWater().Sample(position);
+            const auto river = gameplay ? RiverCurrent(level, position) : Point{};
             const usize cell = y * 16 + x;
             auto& packed = u.Flow[cell / 2];
-            packed[(cell % 2) * 2] = pack(signedByte(water.VelocityX, 10.0),
-                                          signedByte(water.VelocityY, 10.0),
+            packed[(cell % 2) * 2] = pack(signedByte(water.VelocityX + river.X, 10.0),
+                                          signedByte(water.VelocityY + river.Y, 10.0),
                                           signedByte(water.Height, 3.0));
             packed[(cell % 2) * 2 + 1] = pack(static_cast<uint32>(std::round(std::clamp(water.Foam, 0.0, 1.0) * 255.0)),
                                               signedByte(water.DisplacementX, 12.0),
@@ -86,6 +102,8 @@ ocean::OceanUniforms BuildUniforms(const ocean::OceanSettings& settings,
     }
     u.LevelBounds[0] = static_cast<float32>(level.HalfExtent.X);
     u.LevelBounds[1] = static_cast<float32>(level.HalfExtent.Y);
+    u.LevelBounds[2] = gameplay ? static_cast<float32>(level.RiverSpeed) : 0.0F;
+    u.LevelBounds[3] = static_cast<float32>(level.RapidsBoost);
     u.DockInfo[0] = static_cast<float32>(level.DockCenter.X);
     u.DockInfo[1] = static_cast<float32>(level.DockCenter.Y);
     u.DockInfo[2] = static_cast<float32>(level.DockRadius);

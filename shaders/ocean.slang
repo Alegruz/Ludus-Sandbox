@@ -28,9 +28,9 @@ struct OceanUniforms
     float currentDirCos;  // unit current direction x
 
     float currentDirSin;  // unit current direction y
-    float pad0;
-    float pad1;
-    float pad2;
+    float cameraX;
+    float cameraY;
+    float riverTime;
 
     float4 deepColor;
     float4 midColor;
@@ -54,7 +54,7 @@ struct OceanUniforms
     float4 ripple13; // origin.xy, radius, fade
     float4 ripple14; // origin.xy, radius, fade
     float4 ripple15; // origin.xy, radius, fade
-    float4 levelBounds; // half width/height, reserved
+    float4 levelBounds; // half width/height, river speed, rapid boost
     float4 dockInfo; // center.xy, radius, arrival speed
     float4 levelInfo; // rock count, phase, dock progress, boundary hazard
     float4 rock0; // center.xy, radius, reserved
@@ -226,6 +226,23 @@ float valueNoise(float2 p)
     return lerp(lerp(a, b, u.x), lerp(c, d, u.x), u.y);
 }
 
+// The prescribed mean transport matches RiverCurrent; the SDK field adds
+// wind, splashes and gesture disturbances without forcing a closed basin open.
+float riverSpeedAt(float2 world)
+{
+    float lane = world.x / ocean.levelBounds.x;
+    float speed = ocean.levelBounds.z * (1.0 - 0.35 * lane * lane);
+    for (int i = 0; i < 2; ++i)
+    {
+        float center = ocean.levelBounds.y * (float(i) * 0.5 - 0.25);
+        float along = (world.y - center) / 12.0;
+        float envelope = max(1.0 - along * along, 0.0);
+        speed += ocean.levelBounds.z * ocean.levelBounds.w * envelope * envelope;
+    }
+    float fade = saturate((length(world - ocean.dockInfo.xy) - ocean.dockInfo.z - 2.0) / 8.0);
+    return speed * fade * fade * (3.0 - 2.0 * fade);
+}
+
 float broadField(float2 p)
 {
     return valueNoise(p) * 0.65 + valueNoise(p * 2.03 + 7.1) * 0.35;
@@ -245,6 +262,7 @@ float4 fragmentMain(float4 position : SV_Position) : SV_Target0
     float2 world;
     world.x = (position.x - res.x * 0.5) * metersPerPixel;
     world.y = (res.y * 0.5 - position.y) * metersPerPixel; // flip Y
+    world += float2(ocean.cameraX, ocean.cameraY);
 
     float pixelWidth = max(metersPerPixel, 0.035);
     FlowSample flow = fieldAt(world);
@@ -293,6 +311,21 @@ float4 fragmentMain(float4 position : SV_Position) : SV_Target0
                  (0.72 + 0.28 * valueNoise(surfaceWorld * 2.4));
     color = lerp(color, ocean.foamColor.rgb * (0.97 + paperGrain * 0.03), saturate(foam + paintedFoam) * 0.94);
 
+    if (ocean.levelBounds.z > 0.0 && all(abs(world) < ocean.levelBounds.xy))
+    {
+        float speed = riverSpeedAt(world);
+        // Broken longitudinal foam and small upward chevrons make the flow
+        // readable even while the camera is following the boat.
+        float2 carried = world - float2(0.0, speed * ocean.riverTime);
+        float streak = pow(0.5 + 0.5 * sin(carried.x * 1.2 + sin(carried.y * 0.15)), 18.0);
+        streak *= smoothstep(0.55, 0.85, valueNoise(carried * float2(0.9, 0.2)));
+        float2 mark = float2(fmod(world.x + 1000.0, 10.0) - 5.0,
+                            fmod(carried.y + 10000.0, 18.0) - 9.0);
+        float arrow = (1.0 - smoothstep(0.08, 0.28, abs(mark.y + abs(mark.x) - 1.5))) *
+                      (1.0 - smoothstep(1.3, 1.8, abs(mark.x)));
+        color = lerp(color, ocean.foamColor.rgb, (streak * 0.20 + arrow * 0.14) * min(speed, 1.0));
+    }
+
     // Gentle vignette keeps contrast for future boats/debris at the center.
     float2 c = ndc - 0.5;
     float vignette = 1.0 - dot(c, c) * 0.3;
@@ -302,7 +335,10 @@ float4 fragmentMain(float4 position : SV_Position) : SV_Target0
     {
         float2 extent = ocean.levelBounds.xy;
         float outside = step(extent.x, abs(world.x)) + step(extent.y, abs(world.y));
-        color = lerp(color, deep * 0.65, saturate(outside) * 0.65);
+        float land = saturate(outside);
+        float grain = valueNoise(world * 0.65);
+        float3 bank = lerp(float3(0.10, 0.16, 0.14), float3(0.25, 0.30, 0.22), grain);
+        color = ocean.levelBounds.z > 0.0 ? lerp(color, bank, land) : lerp(color, deep * 0.65, land * 0.65);
         float edge = min(abs(abs(world.x) - extent.x), abs(abs(world.y) - extent.y));
         float inBounds = step(abs(world.x), extent.x + 0.25) * step(abs(world.y), extent.y + 0.25);
         float boundary = (1.0 - smoothstep(pixelWidth * 0.5, pixelWidth * 1.5, edge)) * inBounds;

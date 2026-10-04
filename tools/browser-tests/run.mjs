@@ -46,10 +46,22 @@ const playing = page=>until(async()=>{
   if(state==='failed'||state==='device-lost')throw Error('Scene '+state+': '+JSON.stringify(await page.locator('#status').evaluate(el=>({...el.dataset}))));
   return state;
 },v=>v==='playing','playing');
+async function capture(page, options = {}) {
+  // Stop only test RAF submissions during compositor readback. Continuous
+  // SwiftShader WebGL draws can starve screenshot capture; game state is never
+  // set or advanced here. Resume the production callback after the snapshot.
+  await page.evaluate(() => { window.__qaCapture = true; });
+  try {
+    await delay(150);
+    return await page.screenshot(options);
+  } finally {
+    await page.evaluate(() => { window.__qaCapture = false; }).catch(() => {});
+  }
+}
 async function shot(page) {
   // A bottom crop excludes the status and controls and captures the compositor.
   const box=await page.locator('canvas').boundingBox();
-  return page.screenshot({clip:{x:box.x,y:box.y+box.height*0.65,width:Math.min(box.width,540),height:Math.floor(box.height*0.35)}});
+  return capture(page,{clip:{x:box.x,y:box.y+box.height*0.65,width:Math.min(box.width,540),height:Math.floor(box.height*0.35)}});
 }
 function variation(bytes) {
   const {data}=PNG.sync.read(bytes);let sum=0,square=0,count=0;
@@ -69,7 +81,10 @@ async function context(fault='none',options={}) {
     // Bound the expensive procedural shader queue on SwiftShader. This is a
     // test-only RAF delay, not evidence for interactive frame rates.
     const raf=window.requestAnimationFrame.bind(window);
-    window.requestAnimationFrame=cb=>raf(time=>setTimeout(()=>cb(time),rafDelayMs));
+    window.requestAnimationFrame=cb=>raf(time=>setTimeout(function present() {
+      if(window.__qaCapture) { setTimeout(present,20); return; }
+      cb(time);
+    },rafDelayMs));
     const get=HTMLCanvasElement.prototype.getContext;
     HTMLCanvasElement.prototype.getContext=function(type,...args){
       if(type==='webgpu'&&fault==='surface')return null;
@@ -100,7 +115,7 @@ async function run(name,task) {
     entry.status='failed';entry.error=String(error);entry.diagnostics=[];
     for(const {page,messages} of observed){if(page.isClosed())continue;
       const item={url:page.url(),messages};entry.diagnostics.push(item);
-      try{item.status=await page.locator('#status').textContent();item.attributes=await page.locator('#status').evaluate(el=>({...el.dataset}));item.gpuErrors=await page.evaluate(()=>window.__qaErrors);await page.screenshot({path:resolve(output,'failure-'+report.cases.length+'.png')});}catch{}
+      try{item.status=await page.locator('#status').textContent();item.attributes=await page.locator('#status').evaluate(el=>({...el.dataset}));item.gpuErrors=await page.evaluate(()=>window.__qaErrors);await capture(page,{path:resolve(output,'failure-'+report.cases.length+'.png')});}catch{}
     }
   } finally {for(const c of contexts.splice(0))await c.close();}
   console.log(JSON.stringify(entry));
@@ -124,7 +139,7 @@ try {
     assert.equal(await data(page,'backend'),backend);
     reference[backend]=await frozen(page);entry.pixelVariation=variation(reference[backend]);
     assert(entry.pixelVariation>8,'Ocean is a flat clear color');
-    await page.screenshot({path:resolve(output,backend+'.png')});
+    await capture(page,{path:resolve(output,backend+'.png')});
     const paused=await shot(page);await delay(250);assert(difference(paused,await shot(page))<0.1,'Paused ocean moved');
     await page.locator('#panel summary').click();
     const resumeFrame=Number(await data(page,'frames'));
@@ -155,7 +170,7 @@ try {
   for(const fault of ['missing','adapter','device','surface']) await run('Auto fallback after '+fault,async entry=>{
     const c=await context(fault);const page=await c.newPage();await page.goto(base+'/');await playing(page);
     assert.equal(await data(page,'backend'),'webgl2');assert(Number(await data(page,'webgpu-error'))>0);
-    assert(variation(await frozen(page))>8);await page.screenshot({path:resolve(output,'fallback-'+fault+'.png')});
+    assert(variation(await frozen(page))>8);await capture(page,{path:resolve(output,'fallback-'+fault+'.png')});
     entry.backend=await data(page,'backend');assert.equal(observed.find(o=>o.page===page).messages.filter(m=>typeof m==='string'||m.type==='error').length,0);await c.close();
   });
   await run('forced WebGPU fails explicitly without fallback',async()=>{
@@ -167,7 +182,7 @@ try {
     await until(()=>data(page,'state'),s=>s==='failed','failed');assert.equal(await page.locator('#panel').isVisible(),false);
     assert.equal(await page.locator('#status-restart').isVisible(),true);assert.equal(await data(page,'frames'),'0');
     const box=await page.locator('#status-region').boundingBox();assert(box.x>=0&&box.x+box.width<=300&&box.y+box.height<=240);
-    await page.screenshot({path:resolve(output,'both-unavailable.png')});await page.locator('#status-restart').click();
+    await capture(page,{path:resolve(output,'both-unavailable.png')});await page.locator('#status-restart').click();
     await until(()=>data(page,'state'),s=>s==='failed','failed restart');await c.close();
   });
   await run('narrow responsive controls, DPR, iframe',async()=>{
@@ -179,7 +194,7 @@ try {
     assert(status.y+status.height<=panel.y&&panel.x+panel.width<=320&&panel.y+panel.height<=360,'Responsive panel overlaps status or escapes viewport');
     const dims=await page.locator('canvas').evaluate(c=>({w:c.width,h:c.height,cw:c.clientWidth,ch:c.clientHeight}));
     assert(Math.abs(dims.w-dims.cw*1.5)<=1&&Math.abs(dims.h-dims.ch*1.5)<=1);
-    await page.screenshot({path:resolve(output,'narrow-controls.png')});
+    await capture(page,{path:resolve(output,'narrow-controls.png')});
     await page.goto(base+'/iframe.html');const frame=await until(()=>Promise.resolve(page.frames().find(f=>f.url().endsWith('/index.html'))),Boolean,'iframe');
     await playing(frame);assert.equal(await data(frame,'backend'),'webgl2');await c.close();
   });
@@ -187,7 +202,7 @@ try {
     const c=await context('missing');const page=await c.newPage();await page.goto(base+'/');await playing(page);
     entry.loseContext=await page.evaluate(()=>{const ext=document.querySelector('canvas').getContext('webgl2').getExtension('WEBGL_lose_context');if(ext)ext.loseContext();return !!ext;});
     assert(entry.loseContext,'Required test extension unavailable');await until(()=>data(page,'state'),s=>s==='device-lost','context loss');
-    await page.screenshot({path:resolve(output,'context-lost.png')});await page.locator('#status-restart').click();await playing(page);
+    await capture(page,{path:resolve(output,'context-lost.png')});await page.locator('#status-restart').click();await playing(page);
     for(let i=0;i<3;++i){await page.setViewportSize({width:720+i*50,height:480});await page.evaluate(()=>Module._OceanRestart());await playing(page);}
     assert(variation(await frozen(page))>8);await c.close();
   });
@@ -202,7 +217,7 @@ try {
   report.diagnostics=[];
   for(const {page,messages} of observed){if(page.isClosed())continue;
     const item={url:page.url(),messages};report.diagnostics.push(item);
-    try {item.status=await page.locator('#status').textContent();item.attributes=await page.locator('#status').evaluate(el=>({...el.dataset}));item.gpuErrors=await page.evaluate(()=>window.__qaErrors);await page.screenshot({path:resolve(output,'failure-'+report.diagnostics.length+'.png')});}catch{}
+    try {item.status=await page.locator('#status').textContent();item.attributes=await page.locator('#status').evaluate(el=>({...el.dataset}));item.gpuErrors=await page.evaluate(()=>window.__qaErrors);await capture(page,{path:resolve(output,'failure-'+report.diagnostics.length+'.png')});}catch{}
   }
 } finally {
   await browser?.close();server.close();await writeFile(resolve(output,'report.json'),JSON.stringify(report,null,2)+'\n');

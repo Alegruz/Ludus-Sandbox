@@ -4,6 +4,7 @@
 #    include <ludus/foundation/math/dynamics.hpp>
 #endif
 
+#include <algorithm>
 #include <cmath>
 #include <initializer_list>
 #include <limits>
@@ -57,7 +58,46 @@ Camera FitCamera(uint32 width, uint32 height, Point halfExtent) noexcept
     const float64 fitHeight = (halfExtent.X * 2.0 + 10.0) / aspect;
     const float64 levelHeight = halfExtent.Y * 2.0 + 10.0;
     const float64 viewHeight = fitHeight > levelHeight ? fitHeight : levelHeight;
-    return {viewHeight * aspect, viewHeight};
+    return {viewHeight * aspect, viewHeight, {}};
+}
+
+Camera FollowCamera(uint32 width, uint32 height, const LevelDefinition& level, Point boat) noexcept
+{
+    if (width == 0 || height == 0 || level.RiverSpeed <= 0.0)
+    {
+        return FitCamera(width, height, level.HalfExtent);
+    }
+    const float64 aspect = static_cast<float64>(width) / height;
+    const float64 viewHeight = std::max(60.0, (level.HalfExtent.X * 2.0 + 6.0) / aspect);
+    if (viewHeight >= level.HalfExtent.Y * 2.0)
+    {
+        return FitCamera(width, height, level.HalfExtent);
+    }
+    const float64 limit = level.HalfExtent.Y - viewHeight * 0.5 + 4.0;
+    return {viewHeight * aspect, viewHeight, {0.0, std::clamp(boat.Y + viewHeight * 0.20, -limit, limit)}};
+}
+
+Point RiverCurrent(const LevelDefinition& level, Point world) noexcept
+{
+    if (level.RiverSpeed <= 0.0 || !ClearWater(world, level))
+    {
+        return {};
+    }
+    const float64 lane = world.X / level.HalfExtent.X;
+    float64 speed = level.RiverSpeed * (1.0 - 0.35 * lane * lane);
+    for (const float64 center : {-level.HalfExtent.Y * 0.25, level.HalfExtent.Y * 0.25})
+    {
+        const float64 along = (world.Y - center) / 12.0;
+        const float64 envelope = std::max(1.0 - along * along, 0.0);
+        speed += level.RiverSpeed * level.RapidsBoost * envelope * envelope;
+    }
+    if (level.DockRadius > 0.0)
+    {
+        const float64 distance = Length({world.X - level.DockCenter.X, world.Y - level.DockCenter.Y});
+        const float64 fade = std::clamp((distance - level.DockRadius - 2.0) / 8.0, 0.0, 1.0);
+        speed *= fade * fade * (3.0 - 2.0 * fade);
+    }
+    return {0.0, speed};
 }
 
 LevelDefinition RescueLevel() noexcept
@@ -78,21 +118,29 @@ bool TryGetCourseLevel(uint32 index, LevelDefinition& output) noexcept
     {
         return false;
     }
-    auto level = RescueLevel();
+    LevelDefinition level;
     level.Id = index + 1;
-    if (index == 0)
+    level.HalfExtent = {22.0 - index * 2.0, 72.0 + index * 16.0};
+    level.Spawn = {0.0, -level.HalfExtent.Y + 12.0};
+    level.DockCenter = {index == 1 ? -9.0 : 9.0, level.HalfExtent.Y - 13.0};
+    level.DockRadius = 6.0;
+    level.BoundaryHazard = true;
+    level.RiverSpeed = 1.8 + index * 0.45;
+    level.RapidsBoost = index * 0.3;
+    level.RockCount = 3 + index * 2;
+    // Each gate changes the safe lane; the spaces between let players recover.
+    level.Rocks[0] = {.Center = {-6.0, -level.HalfExtent.Y + 38.0}, .Radius = 6.0, .Id = 1};
+    level.Rocks[1] = {.Center = {6.0, -level.HalfExtent.Y + 68.0}, .Radius = 6.0, .Id = 2};
+    level.Rocks[2] = {.Center = {-5.0, -level.HalfExtent.Y + 98.0}, .Radius = 5.0, .Id = 3};
+    if (index > 0)
     {
-        level.RockCount = 0;
-        level.DockCenter = {8.0, 10.0};
+        level.Rocks[3] = {.Center = {6.0, -level.HalfExtent.Y + 128.0}, .Radius = 5.0, .Id = 4};
+        level.Rocks[4] = {.Center = {-12.0, -level.HalfExtent.Y + 70.0}, .Radius = 3.0, .Id = 5};
     }
-    else if (index == 2)
+    if (index == 2)
     {
-        level.Spawn = {0.0, -28.0};
-        level.RockCount = 3;
-        level.Rocks[0] = {.Center = {-6.0, -12.0}, .Radius = 5.0, .Id = 1};
-        level.Rocks[1] = {.Center = {6.0, 7.0}, .Radius = 5.0, .Id = 2};
-        level.Rocks[2] = {.Center = {-6.0, 24.0}, .Radius = 4.0, .Id = 3};
-        level.DockCenter = {10.0, 29.0};
+        level.Rocks[5] = {.Center = {-6.0, -level.HalfExtent.Y + 158.0}, .Radius = 5.0, .Id = 6};
+        level.Rocks[6] = {.Center = {13.0, -level.HalfExtent.Y + 100.0}, .Radius = 3.0, .Id = 7};
     }
     output = level;
     return true;
@@ -100,16 +148,16 @@ bool TryGetCourseLevel(uint32 index, LevelDefinition& output) noexcept
 
 const char* CourseTitle(uint32 index) noexcept
 {
-    constexpr const char* titles[kCourseCount] = {"First Ripples", "Around the Rock", "The Channel"};
+    constexpr const char* titles[kCourseCount] = {"River Mouth", "Rock Gates", "The Rapids"};
     return index < kCourseCount ? titles[index] : "Practice";
 }
 
 const char* CourseInstruction(uint32 index) noexcept
 {
     constexpr const char* instructions[kCourseCount] = {
-        "Carry the boat to the green dock with the current; arrive slowly.",
-        "Guide the boat around the rock to the green dock; arrive slowly.",
-        "Weave around the staggered rocks, then slow down inside the green dock.",
+        "The river carries you upward. Steer around alternating rocks, then enter the calm green dock.",
+        "Pick the open lane before each rock gate. Drag across the flow to steer; arrive slowly.",
+        "Faster water leaves less time to react. Watch ahead, weave through the rapids, and reach the calm dock.",
     };
     return index < kCourseCount ? instructions[index] : "Guide the boat with the water.";
 }
@@ -201,7 +249,9 @@ bool RippleGame::LoadLevel(const LevelDefinition& level) noexcept
         Length(level.SpawnVelocity) > mPhysics.MaxBoatSpeed || level.RockCount > kRockCapacity ||
         !std::isfinite(level.DockCenter.X) || !std::isfinite(level.DockCenter.Y) || !std::isfinite(level.DockRadius) ||
         level.DockRadius < 0.0 || !std::isfinite(level.DockSpeed) || level.DockSpeed <= 0.0 ||
-        level.DockDwellTicks == 0 || level.DockDwellTicks > 600)
+        level.DockDwellTicks == 0 || level.DockDwellTicks > 600 || !std::isfinite(level.RiverSpeed) ||
+        level.RiverSpeed < 0.0 || level.RiverSpeed > 5.0 || !std::isfinite(level.RapidsBoost) ||
+        level.RapidsBoost < 0.0 || level.RapidsBoost > 1.0)
     {
         return false;
     }
@@ -243,7 +293,8 @@ float64 RippleGame::DockProgress() const noexcept
 
 Point ScreenToWorld(Point normalized, Camera camera) noexcept
 {
-    return {(normalized.X - 0.5) * camera.Width, (0.5 - normalized.Y) * camera.Height};
+    return {camera.Center.X + (normalized.X - 0.5) * camera.Width,
+            camera.Center.Y + (0.5 - normalized.Y) * camera.Height};
 }
 
 bool RingContact(Point start, Point end, Point origin, float64 ringStart, float64 ringEnd, float64& time) noexcept
@@ -459,7 +510,8 @@ PlacementResult RippleGame::EndStroke(Point world) noexcept
 Point RippleGame::WaterAt(Point world) const noexcept
 {
     const auto water = mWater.Sample(world);
-    return {mPhysics.WaterVelocity.X + water.VelocityX, mPhysics.WaterVelocity.Y + water.VelocityY};
+    const auto river = RiverCurrent(mLevel, world);
+    return {mPhysics.WaterVelocity.X + water.VelocityX + river.X, mPhysics.WaterVelocity.Y + water.VelocityY + river.Y};
 }
 
 void RippleGame::CancelInput() noexcept

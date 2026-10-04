@@ -48,8 +48,11 @@ struct LevelDefinition final
     float64 DockSpeed = 1.5;
     uint32 DockDwellTicks = 24;
     bool BoundaryHazard = false;
+    float64 RiverSpeed = 0.0;  // Authored upward transport, independent of wind waves.
+    float64 RapidsBoost = 0.0; // Extra flow through two bounded rapid stretches.
 };
 [[nodiscard]] LevelDefinition RescueLevel() noexcept;
+[[nodiscard]] Point RiverCurrent(const LevelDefinition& level, Point world) noexcept;
 // Zero-based authored campaign catalog. Invalid lookups leave output unchanged.
 [[nodiscard]] bool TryGetCourseLevel(uint32 index, LevelDefinition& output) noexcept;
 [[nodiscard]] const char* CourseTitle(uint32 index) noexcept;
@@ -80,9 +83,11 @@ struct Camera final
 {
     float64 Width = 70.0;
     float64 Height = 90.0;
+    Point Center;
 };
 [[nodiscard]] Camera FitCamera(uint32 width, uint32 height, Point halfExtent = {30.0, 40.0}) noexcept;
 [[nodiscard]] Point ScreenToWorld(Point normalized, Camera camera) noexcept;
+[[nodiscard]] Camera FollowCamera(uint32 width, uint32 height, const LevelDefinition& level, Point boat) noexcept;
 
 struct Boat final
 {

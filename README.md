@@ -7,8 +7,11 @@ boat rescue game. Tap for a finite splash and spreading gravity waves, drag to a
 or stir to build circulation. A nonlinear shallow-water solver evolves wind
 swells, interference, reflected waves and transported foam. Boat drag samples
 the same velocity field; a passing wave can rock it in both directions.
-Drag to steer in open water, around a rock, then weave through
-a staggered channel. Arrive slowly in each green dock to unlock Next level.
+Ride three vertical river runs with a following camera: River Mouth, Rock Gates,
+and The Rapids. The bottom-to-top current carries the boat toward alternating
+rock passages; later runs add stronger flow and faster stretches. Drag across
+the current to steer, and use the calm water near the dock to slow down.
+Arrive slowly in each green dock to unlock Next level.
 Pause, Retry the current course, or switch to ocean tuning. Play again starts a
 new run after the third rescue.
 
@@ -21,7 +24,7 @@ cream surf, ochre timber and warm stone. The responsive HUD uses the same palett
 Marketing artwork and unaltered gameplay captures live in
 [assets/itch/poseidon-saves-the-day](assets/itch/poseidon-saves-the-day).
 
-![Painted water and a wooden rescue boat](docs/screenshots/poseidon-flow-swirl.png)
+![An upward-flowing river with alternating rock gates and a following camera](docs/screenshots/river-mouth-landscape.png)
 
 The browser build is the playable target. Native compilation is verified, but
 native pointer controls have not been connected. All three courses, docking,

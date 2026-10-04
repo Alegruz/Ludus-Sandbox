@@ -43,11 +43,11 @@ struct alignas(16) OceanUniforms final
 
     float32 CurrentDirCos; // offset 48 (unit direction x)
     float32 CurrentDirSin; // offset 52 (unit direction y)
-    float32 Pad0;          // offset 56
-    float32 Pad1;          // offset 60
+    float32 CameraX;       // offset 56 (camera center X)
+    float32 CameraY;       // offset 60 (camera center Y)
 
-    float32 Pad2;    // offset 64 (scalar; next vec4 aligns to 80)
-    float32 PadB[3]; // offset 68..79 : padding up to the vec4 boundary
+    float32 RiverTime; // offset 64 (committed river time; next vec4 aligns to 80)
+    float32 PadB[3];   // offset 68..79 : padding up to the vec4 boundary
 
     float32 DeepColor[4];    // offset 80  : vec4
     float32 MidColor[4];     // offset 96  : vec4
@@ -57,7 +57,7 @@ struct alignas(16) OceanUniforms final
     float32 BoatInfo[4];                       // position.xy, heading, hull radius
     float32 GameInfo[4];                       // enabled, ring count, cooldown fraction, contact flash
     float32 Ripples[game::kRippleCapacity][4]; // origin.xy, radius, fade
-    float32 LevelBounds[4];                    // half width/height, reserved
+    float32 LevelBounds[4];                    // half width/height, river speed, rapid boost
     float32 DockInfo[4];                       // center.xy, radius, maximum arrival speed
     float32 LevelInfo[4];                      // rock count, phase, dock dwell fraction, boundary hazard
     float32 Rocks[game::kRockCapacity][4];     // center.xy, radius, reserved
@@ -83,6 +83,9 @@ static_assert(offsetof(OceanUniforms, WaveIntensity) == 40);
 static_assert(offsetof(OceanUniforms, FoamAmount) == 44);
 static_assert(offsetof(OceanUniforms, CurrentDirCos) == 48);
 static_assert(offsetof(OceanUniforms, CurrentDirSin) == 52);
+static_assert(offsetof(OceanUniforms, CameraX) == 56);
+static_assert(offsetof(OceanUniforms, CameraY) == 60);
+static_assert(offsetof(OceanUniforms, RiverTime) == 64);
 static_assert(offsetof(OceanUniforms, DeepColor) == 80);
 static_assert(offsetof(OceanUniforms, MidColor) == 96);
 static_assert(offsetof(OceanUniforms, ShallowColor) == 112);
