@@ -173,6 +173,7 @@ jobs:
         working-directory: tools/browser-tests
         run: |
           npm test
+          DRIFT_UI_SCALE=0.5 npm run test:ui -- ../../out/browser-qa/extracted ../../out/browser-qa/ui-results
           DRIFT_GAME_SCALE=0.5 npm run test:game -- ../../out/browser-qa/extracted ../../out/browser-qa/ripple-results
           DRIFT_GESTURE_SCALE=0.5 npm run test:gestures -- ../../out/browser-qa/extracted ../../out/browser-qa/gesture-results
           npm run test:waves -- ../../out/browser-qa/extracted ../../out/browser-qa/wave-results
@@ -182,6 +183,7 @@ jobs:
           name: drift-ocean-browser-evidence
           path: |
             out/browser-qa/results/
+            out/browser-qa/ui-results/
             out/browser-qa/ripple-results/
             out/browser-qa/gesture-results/
             out/browser-qa/wave-results/

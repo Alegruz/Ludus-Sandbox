@@ -7,6 +7,7 @@ import {resolve, sep} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
 import {createHash} from 'node:crypto';
 import {chromium} from 'playwright';
+import {canvasView} from './view.mjs';
 
 const root = resolve(process.argv[2]);
 const output = resolve(process.argv[3]);
@@ -62,11 +63,10 @@ try {
     await delay(300);
     await page.locator('#game-reset').click();
     await until(() => state(page), s => Number(s.energy) === 0, 'calm reset');
-    const height = Math.max(90, 70 / (viewport.width / viewport.height));
+    const view = await canvasView(page);
     const tap = async x => {
-      const px = viewport.width / 2 + x * viewport.height / height;
-      const py = viewport.height / 2 + 22 * viewport.height / height;
-      if (mobile) await page.touchscreen.tap(px, py); else await page.mouse.click(px, py);
+      const point = view.point(x, -22);
+      if (mobile) await page.touchscreen.tap(point.x, point.y); else await page.mouse.click(point.x, point.y);
     };
     await tap(-8);
     await until(() => state(page), s => Number(s.placements) === 1 && Number(s.cooldown) === 0, 'first finite splash');

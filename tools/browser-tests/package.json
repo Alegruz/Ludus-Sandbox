@@ -6,7 +6,8 @@
     "test": "node run.mjs",
     "test:game": "node ripple.mjs",
     "test:gestures": "node gestures.mjs",
-    "test:waves": "node waves.mjs"
+    "test:waves": "node waves.mjs",
+    "test:ui": "node ui.mjs"
   },
   "devDependencies": {
     "playwright": "1.55.1",

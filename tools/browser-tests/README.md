@@ -23,6 +23,17 @@ flag-free user compatibility, interactive performance or hosted acceptance.
 Screenshots, requests, ZIP identity and results go to `out/browser-qa/results`.
 The harness and its dependencies are never included in the game package.
 
+## Mobile HUD
+
+`npm run test:ui -- ../../out/browser-qa/extracted ../../out/browser-qa/ui-results`
+checks portrait phones, short embeds, landscape, simulated safe-area insets,
+44 px touch targets and a canvas clear of persistent HUD controls. Help freezes
+the game, owns keyboard focus and restores the previous pause choice when closed
+by its button or Escape. Real touch verifies the fitted, inset canvas mapping;
+graphics restart and tuning mode retain the layout. Both renderers save screenshots.
+`DRIFT_UI_SCALE=0.5` selects the software-GPU CI scale.
+The harness uses a test-only 500 ms RAF delay to bound software rendering work.
+
 ## Boat and ripple controls
 
 After the same extraction, use the command below for gameplay checks, including
@@ -58,7 +69,7 @@ one case by name, such as `webgl2-touch`.
 report records the tested DPR (default 1, matching the rescue-course harness).
 The gesture harness uses a test-only 500 ms RAF delay. Paused captures wait for
 three frozen frames to render before the first capture, then two new frames
-before the second. The exact comparison excludes the outer four CSS pixels,
+before the second. The exact comparison excludes the outer four CSS pixels of the canvas,
 which contain the independently composited focus outline; the fitted water is
 fully inside this region. Both comparison screenshots are saved.
 `DRIFT_GESTURE_SCALE=0.5` selects the CI framebuffer scale.

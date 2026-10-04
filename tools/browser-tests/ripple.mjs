@@ -6,6 +6,7 @@ import {createServer} from 'node:http';
 import {resolve, sep} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
 import {chromium} from 'playwright';
+import {canvasView} from './view.mjs';
 import {PNG} from 'pngjs';
 
 const root = resolve(process.argv[2] || '../../out/build/web-emscripten-development');
@@ -70,9 +71,8 @@ try {
       await delay(200);
       await page.locator('#game-reset').click();
       assert(await page.locator('#panel').isHidden(), 'Tuning controls obscure the game');
-      const viewHeight = Math.max(90, 70 / (viewport.width / viewport.height));
-      const x = viewport.width / 2 - 5 * viewport.height / viewHeight;
-      const y = viewport.height / 2 + 22 * viewport.height / viewHeight;
+      const view = await canvasView(page);
+      const {x, y} = view.point(-5, -22);
       if (mobile) await page.touchscreen.tap(x, y); else await page.mouse.click(x, y);
       await until(() => state(page), s => Number(s.contacts) === 1 && Number(s.x) > 0.1, 'splash wave rocks boat');
       await page.locator('#game-pause').click();
@@ -96,7 +96,9 @@ try {
       const before = Number(await page.locator('#status').getAttribute('data-frames'));
       await waitFrames(page, before + 2);
       const screenshot = PNG.sync.read(await page.screenshot());
-      const cx = Math.floor(screenshot.width / 2), cy = Math.floor(screenshot.height / 2 + 22 * screenshot.height / viewHeight);
+      const boatPoint = (await canvasView(page)).point(0, -22);
+      const cx = Math.floor(boatPoint.x * screenshot.width / viewport.width);
+      const cy = Math.floor(boatPoint.y * screenshot.height / viewport.height);
       const pixel = (cy * screenshot.width + cx) * 4;
       assert(screenshot.data[pixel] > screenshot.data[pixel + 2] + 15, 'Boat is not visible at the physical center');
 
@@ -138,7 +140,7 @@ try {
       });
       await delay(250);
       assert.equal(Number((await state(page)).placements), 0, 'Cancelled pointer emitted a ripple');
-      const rx = 844 / 2 + 5 * 390 / 90, ry = 390 / 2 + 22 * 390 / 90;
+      const {x: rx, y: ry} = (await canvasView(page)).point(5, -22);
       if (mobile) await page.touchscreen.tap(rx, ry); else await page.mouse.click(rx, ry);
       await until(() => state(page), s => Number(s.contacts) === 1 && Number(s.x) < -0.1, 'restart input');
       assert.equal(Number((await state(page)).placements), 1);
@@ -146,28 +148,24 @@ try {
       // Navigate with real pointer strokes; no boat/velocity setters.
       await page.locator('#game-reset').click();
       const placeWorld = async (worldX, worldY) => {
-        const size = page.viewportSize();
-        const height = Math.max(90, 70 / (size.width / size.height));
-        const px = size.width / 2 + worldX * size.height / height;
-        const py = size.height / 2 - worldY * size.height / height;
-        if (mobile) await page.touchscreen.tap(px, py); else await page.mouse.click(px, py);
+        const point = (await canvasView(page)).point(worldX, worldY);
+        if (mobile) await page.touchscreen.tap(point.x, point.y); else await page.mouse.click(point.x, point.y);
       };
       const clearDock = async (worldX, worldY) => {
-        const size = page.viewportSize();
-        const scale = size.height / Math.max(90, 70 / (size.width / size.height));
-        const box = await page.locator('#status-region').boundingBox();
-        const dock = {x: size.width / 2 + worldX * scale, y: size.height / 2 - worldY * scale, radius: 5 * scale};
-        const closestX = Math.max(box.x, Math.min(dock.x, box.x + box.width));
-        const closestY = Math.max(box.y, Math.min(dock.y, box.y + box.height));
-        assert(Math.hypot(dock.x - closestX, dock.y - closestY) > dock.radius,
-          'HUD obscures the dock at ' + JSON.stringify(size));
+        const view = await canvasView(page);
+        const dock = {...view.point(worldX, worldY), radius: 5 * view.scale};
+        for (const selector of ['#status-region', '#game-controls']) {
+          const box = await page.locator(selector).boundingBox();
+          const closestX = Math.max(box.x, Math.min(dock.x, box.x + box.width));
+          const closestY = Math.max(box.y, Math.min(dock.y, box.y + box.height));
+          assert(Math.hypot(dock.x - closestX, dock.y - closestY) > dock.radius,
+            selector + ' obscures the dock at ' + JSON.stringify(page.viewportSize()));
+        }
       };
       const cdp = mobile ? await context.newCDPSession(page) : null;
       const dragWorld = async (from, to) => {
-        const size = page.viewportSize();
-        const height = Math.max(90, 70 / (size.width / size.height));
-        const screen = p => ({x: size.width / 2 + p.x * size.height / height, y: size.height / 2 - p.y * size.height / height});
-        const start = screen(from), end = screen(to);
+        const view = await canvasView(page);
+        const start = view.point(from.x, from.y), end = view.point(to.x, to.y);
         if (mobile) {
           await cdp.send('Input.dispatchTouchEvent', {type: 'touchStart', touchPoints: [{...start, id: 1}]});
           for (let i = 1; i <= 8; ++i) await cdp.send('Input.dispatchTouchEvent', {type: 'touchMove', touchPoints: [{x: start.x + (end.x - start.x) * i / 8, y: start.y + (end.y - start.y) * i / 8, id: 1}]});

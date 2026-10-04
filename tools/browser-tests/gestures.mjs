@@ -6,6 +6,7 @@ import {createServer} from 'node:http';
 import {resolve, sep} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
 import {chromium} from 'playwright';
+import {canvasView} from './view.mjs';
 import {PNG} from 'pngjs';
 
 const root = resolve(process.argv[2] || '../../out/browser-qa/extracted');
@@ -60,10 +61,6 @@ try {
       const name = backend + (mobile ? '-touch' : '-mouse');
       if (process.env.DRIFT_GESTURE_FILTER && !name.includes(process.env.DRIFT_GESTURE_FILTER)) continue;
       const viewport = mobile ? {width: 390, height: 844} : {width: 960, height: 600};
-      // The 3 CSS-pixel focus outline is outside the fitted water bounds. At
-      // fractional DPR its compositor rounding can change by one color level.
-      // Compare the water exactly, without that independently composited rim.
-      const waterClip = {x: 4, y: 4, width: viewport.width - 8, height: viewport.height - 8};
       const context = await browser.newContext({viewport, hasTouch: mobile, deviceScaleFactor: process.env.DRIFT_GESTURE_SCALE ? report.renderScale : mobile ? report.touchDpr : 1});
       context.setDefaultTimeout(60000);
       await context.addInitScript(rafDelay => {
@@ -77,9 +74,11 @@ try {
       await page.goto(base + '/?backend=' + backend);
       await until(() => page.locator('#status').getAttribute('data-state'), s => s === 'playing', 'startup');
       await until(() => page.locator('#status').getAttribute('data-frames'), n => Number(n) > 2, 'pixels');
-      const viewHeight = Math.max(90, 70 / (viewport.width / viewport.height));
-      const screen = (x, y) => ({x: viewport.width / 2 + x * viewport.height / viewHeight,
-        y: viewport.height / 2 - y * viewport.height / viewHeight});
+      const view = await canvasView(page);
+      const screen = view.point;
+      // Exclude the 3 CSS-pixel focus rim, including on an inset mobile canvas.
+      const waterClip = {x: view.box.x + 4, y: view.box.y + 4,
+        width: view.box.width - 8, height: view.box.height - 8};
       const cdp = mobile ? await context.newCDPSession(page) : null;
       const pointer = async (phase, point) => {
         if (mobile) {
@@ -166,7 +165,7 @@ try {
         const canvas = document.getElementById('canvas');
         const rect = canvas.getBoundingClientRect();
         const event = (type, id, primary = true) => new PointerEvent(type, {bubbles: true,
-          pointerId: id, isPrimary: primary, button: 0, clientX: rect.width / 2, clientY: rect.height / 2 + 22 * rect.height / Math.max(90, 70 / (rect.width / rect.height))});
+          pointerId: id, isPrimary: primary, button: 0, clientX: rect.left + rect.width / 2, clientY: rect.top + rect.height / 2 + 22 * rect.height / Math.max(90, 70 / (rect.width / rect.height))});
         canvas.dispatchEvent(event('pointerdown', 71));
         canvas.dispatchEvent(event('pointerup', 72, false));
         canvas.dispatchEvent(event('pointercancel', 71));
