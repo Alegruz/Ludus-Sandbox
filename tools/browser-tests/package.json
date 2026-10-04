@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "test": "node run.mjs",
-    "test:game": "node ripple.mjs"
+    "test:game": "node ripple.mjs",
+    "test:gestures": "node gestures.mjs"
   },
   "devDependencies": {
     "playwright": "1.55.1",

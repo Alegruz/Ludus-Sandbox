@@ -102,7 +102,7 @@ def main():
     files['licenses/SPIRV-Cross.txt'] = (engine / 'out/shader-tools/spirv-cross/LICENSE').read_bytes()
     files['NOTICE.txt'] = b'Drift ocean playground. Ludus: MIT. Runtime and build-tool notices are in licenses/. SPIRV-Cross is a build-time tool and is not shipped. Payload identity and tool pins are in build-info.json.\n'
     manifest = json.loads((build / 'ludus-shaders/LudusSandbox/ocean/manifest.json').read_text())
-    if manifest['uniform_sizes'] != {'vertex': 736, 'fragment': 736, 'wgsl': 736, 'glsl_es': 736}:
+    if manifest['uniform_sizes'] != {'vertex': 1024, 'fragment': 1024, 'wgsl': 1024, 'glsl_es': 1024}:
         raise ValueError('Ocean upload layout is not valid across all backends')
     manifest.pop('commands', None)
     revision = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=engine, text=True).strip()

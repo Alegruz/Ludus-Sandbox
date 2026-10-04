@@ -56,6 +56,8 @@ as simulation. The upload grows from 432 to 736 bytes, preserving previous field
 offsets. Bounds start at 432, dock at 448, level state at 464, and sixteen rock
 records at 480. Individually named Slang rock fields preserve the established
 WebGL 2 reflection contract. C++ assertions and packaging enforce the layout.
+The subsequent [ocean interaction update](OCEAN_INTERACTIONS.md) appends gesture
+effects and boat motion, extending the current block to 1024 bytes.
 
 ## Validation
 

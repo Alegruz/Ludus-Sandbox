@@ -6,6 +6,9 @@ M0/M1 record below describes the original open-water baseline.
 
 The [physics and fluid implementation](PHYSICS_FLUID_SIMULATION.md) adds checked
 SDK kernels and validated current/drag tuning to this baseline.
+The later [ocean interaction update](OCEAN_INTERACTIONS.md) adds directional
+waves, rotating currents, surface lighting and a boat wake. The M1 validation
+and package hash below are historical evidence for the original ripple slice.
 
 Implemented October 3, 2026. This is M0/M1: an open-water trial with one disabled
 boat, point ripples, pause/reset and the existing ocean tuning mode. M2 supplies
@@ -64,7 +67,8 @@ position and ring ages. Pause, blur, hidden state, mode changes and graphics
 restart discard queued input and frame debt; Reset also clears contacts,
 cooldown, rings, boat state and counters. Graphics restart preserves the world.
 
-The upload block is 432 bytes. Original ocean fields remain at offsets 0–143,
+The original M1 upload block was 432 bytes; the interaction update uses 1024.
+Original ocean fields remain at offsets 0–143,
 boat data starts at 144, game data at 160 and sixteen vec4 ring records at 176.
 The CPU array and the individually named Slang ring fields have identical
 contiguous layout. Named fields accommodate the SDK's present WebGL 2 reflection

@@ -34,7 +34,7 @@ Teach these relationships through an open starting area before adding obstacles.
 | Element | Proposed rule |
 | --- | --- |
 | Boat | One boat with a circular gameplay hull, position, velocity, and visual heading. No engine thrust or direct rotation input. |
-| Placement | One primary click/tap places one ripple at a valid water position. Holding or dragging does not emit additional ripples. |
+| Placement | One primary click/tap places one ripple at a valid water position on release. A straight drag generates a directional wave, and a circular drag generates a rotating current; see [Ocean interactions](OCEAN_INTERACTIONS.md). |
 | Ripple | Expands at a constant speed, fades over a bounded lifetime, and pushes radially outward on its first contact with the boat. |
 | Repeated contact | Each ripple can affect the boat once. Remaining inside the ring or re-entering it grants no further impulse. |
 | Simultaneous ripples | A small bounded pool permits overlapping rings. A cooldown limits rapid placement. |

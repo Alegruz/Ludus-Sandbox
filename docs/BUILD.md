@@ -133,8 +133,9 @@ clang++ -std=c++23 -Wall -Wextra -Wpedantic -fno-exceptions -I src \
 
 ## 5. Offline screenshots (no GPU)
 
-`tools/preview/ocean_preview.cpp` is a faithful CPU port of `shaders/ocean.slang`
-used only to capture the authored look offline (it is **not** part of the game):
+`tools/preview/ocean_preview.cpp` renders the original ambient ocean offline
+(it is **not** part of the game). It predates the new lighting, gesture effects
+and boat wake. Use real browser captures for current visual acceptance:
 
 ```bash
 clang++ -std=c++23 -O2 -fno-exceptions -I src \

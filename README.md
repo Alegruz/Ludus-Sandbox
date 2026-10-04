@@ -3,19 +3,21 @@
 External sandbox application for developing and validating the Ludus engine SDK.
 
 This checkout contains **Drift**, a top-down 2D water playground with a first
-playable boat/ripple slice. Click or tap the water to create an expanding ring;
-the ring pushes the disabled boat away from its origin when it reaches the hull.
-Pause, reset the boat, or switch to the existing ocean tuning mode.
+playable boat/water slice. Tap for an expanding ripple, swipe for a traveling
+wave, or draw circles for a swirling current. Waves and swirls transport the
+disabled boat in the direction of the gesture; ripples push it away on contact.
+Guide the boat around the rock and arrive slowly in the green dock. Pause,
+Retry after a crash, or switch to the existing ocean tuning mode.
 
 Rendering uses one procedural fullscreen pass authored in Slang, compiled to
 SPIR-V for native Vulkan, WGSL for WebGPU, and generated GLSL ES for WebGL 2.
 Game rules and state live in this repository and consume the installed Ludus SDK.
 
-![Boat and ripple in the browser](docs/screenshots/ripple-mouse.png)
+![Swirling water guides the boat in the rescue course](docs/screenshots/ocean-swirl.png)
 
 The browser build is the playable target. Native compilation is verified, but
-native pointer controls have not been connected. Rocks, docking, crash/retry,
-and levels are the next milestone.
+native pointer controls have not been connected. One rescue course includes
+rocks, docking and crash/Retry; three-level progression remains the next milestone.
 
 ## Highlights
 
@@ -45,6 +47,8 @@ and levels are the next milestone.
 | [Ripple game architecture](docs/RIPPLE_GAME_ARCHITECTURE.md) | Simulation timing, input, collision, shader snapshot, and engine/host boundaries. |
 | [Ripple game milestones](docs/RIPPLE_GAME_MILESTONES.md) | Acceptance gates from the existing ocean to a packaged browser game. |
 | [First playable implementation](docs/RIPPLE_GAME_IMPLEMENTATION.md) | Implemented controls, tuning, exact validation and remaining acceptance. |
+| [Rescue course](docs/RIPPLE_GAME_M2.md) | Rock hazards, slow docking, crash/Retry, and level validation. |
+| [Ocean interactions](docs/OCEAN_INTERACTIONS.md) | Swipe waves, signed swirls, water lighting, gesture lifecycle and validation. |
 | [docs/VALIDATION.md](docs/VALIDATION.md) | Honest validation results: what was verified here, what requires a GPU host, and how to reproduce the remaining checks. |
 
 CI (`.github/workflows/ci.yml`) defines three gates on every push/PR:

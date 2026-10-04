@@ -101,6 +101,8 @@ public:
     }
 
     [[nodiscard]] game::PlacementResult PlaceRipple(foundation::float64 x, foundation::float64 y) noexcept;
+    [[nodiscard]] game::PlacementResult
+    Stroke(foundation::float64 x, foundation::float64 y, foundation::uint32 phase) noexcept;
     [[nodiscard]] const game::RippleGame& GetGame() const noexcept
     {
         return mGame;

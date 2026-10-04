@@ -23,7 +23,9 @@ const server = createServer(async (request, response) => {
 });
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 const base = `http://127.0.0.1:${server.address().port}`;
-const report = {kind: 'Real software GPU, emulated touch; physical devices unverified', deviceScaleFactor: 1, rafDelayMs: 50, cases: [],
+const report = {kind: 'Real software GPU, emulated touch; physical devices unverified', cases: [],
+  rafDelayMs: {mouse: 50, touch: 50},
+  touchDpr: Number(process.env.DRIFT_GAME_DPR || 1),
   args: ['--enable-unsafe-webgpu', '--enable-features=Vulkan', '--use-webgpu-adapter=swiftshader',
     '--use-angle=swiftshader', '--use-vulkan=swiftshader', '--disable-vulkan-surface', '--enable-unsafe-swiftshader']};
 let browser;
@@ -42,15 +44,15 @@ try {
   report.browserVersion = browser.version();
   for (const backend of ['webgpu', 'webgl2']) {
     for (const mobile of [false, true]) {
+      const name = backend + (mobile ? '-touch' : '-mouse');
+      if (process.env.DRIFT_GAME_FILTER && !name.includes(process.env.DRIFT_GAME_FILTER)) continue;
       const viewport = mobile ? {width: 390, height: 844} : {width: 960, height: 540};
-      // The ocean suite separately verifies DPR 2. Keep long navigation at DPR
-      // 1 so software rasterization does not dominate the simulation timeout.
-      const context = await browser.newContext({viewport, hasTouch: mobile, deviceScaleFactor: 1});
+      const context = await browser.newContext({viewport, hasTouch: mobile, deviceScaleFactor: mobile ? report.touchDpr : 1});
       // Bound expensive software-GPU work. No interactive timing claim is made.
-      await context.addInitScript(() => {
+      await context.addInitScript(rafDelay => {
         const raf = requestAnimationFrame;
-        window.requestAnimationFrame = callback => raf(time => setTimeout(() => callback(time), 50));
-      });
+        window.requestAnimationFrame = callback => raf(time => setTimeout(() => callback(time), rafDelay));
+      }, report.rafDelayMs[mobile ? 'touch' : 'mouse']);
       const page = await context.newPage(); activePage = page;
       const errors = [];
       page.on('console', message => { if(message.type()==='warning'||message.type()==='error') errors.push(message.text()); });
@@ -77,12 +79,12 @@ try {
       const later = await state(page);
       assert.equal(later.ticks, frozen.ticks, 'Paused game advanced');
       assert.equal(later.x, frozen.x, 'Paused boat moved');
-      const name = backend + (mobile ? '-touch' : '-mouse');
       await page.screenshot({path: resolve(output, name + '.png')});
       await page.mouse.click(x, y); await delay(150);
       assert.equal((await state(page)).placements, frozen.placements, 'Paused input created a ripple');
 
-      await page.locator('#game-reset').click(); await delay(150);
+      await page.locator('#game-reset').click();
+      await until(() => state(page), s => Number(s.x) === 0 && Number(s.placements) === 0 && Number(s.rings) === 0, 'reset telemetry');
       const reset = await state(page);
       assert.equal(Number(reset.x), 0); assert.equal(Number(reset.y), -22); assert.equal(reset.phase, 'playing'); assert.equal(Number(reset.placements), 0); assert.equal(Number(reset.rings), 0);
       const before = Number(await page.locator('#status').getAttribute('data-frames'));
@@ -95,11 +97,14 @@ try {
       await page.setViewportSize({width: 844, height: 390});
       await delay(200);
       assert.equal(Number((await state(page)).x), 0, 'Resize moved physics');
-      await page.locator('#mode').click(); await delay(150);
+      await page.locator('#mode').click();
+      await until(() => state(page), s => s.enabled === 'false', 'tuning mode');
       assert.equal((await state(page)).enabled, 'false');
-      await page.locator('#mode').click(); await delay(150);
+      await page.locator('#mode').click();
+      await until(() => state(page), s => s.enabled === 'true', 'boat mode');
       assert.equal((await state(page)).enabled, 'true');
       await page.evaluate(() => { Module._OceanSetPaused(0); Module._DriftSetFocused(0); });
+      await until(() => state(page), s => s.paused === 'false', 'blur telemetry');
       const blurred = await state(page); await delay(300);
       assert.equal((await state(page)).ticks, blurred.ticks, 'Blurred game advanced');
       await page.evaluate(() => Module._DriftSetFocused(1));

@@ -25,7 +25,8 @@ The harness and its dependencies are never included in the game package.
 
 ## Boat and ripple controls
 
-After the same extraction, use the command below for the M1 gameplay checks.
+After the same extraction, use the command below for gameplay checks, including
+rock rejection, crashing, rescue docking and Retry.
 Without arguments, `npm run test:game` targets the development build.
 These verify outward mouse/touch pushes, exactly one ring per placement, paused
 input rejection, reset, fitted resize/DPR mapping, tuning-mode transitions,
@@ -37,5 +38,21 @@ default. To use an explicit artifact directory:
 npm run test:game -- ../../out/browser-qa/extracted ../../out/browser-qa/ripple-results
 ```
 
-This harness uses a 50 ms RAF delay to bound software-rendering work. Touch is
+This harness uses a test-only 50 ms RAF delay to
+bound software-rendering work. Touch is
 emulated, not a physical mobile acceptance result.
+The test waits for reset/mode telemetry instead of assuming a 150 ms update.
+`DRIFT_GAME_FILTER` selects a named case; `DRIFT_GAME_DPR=2` optionally increases
+the emulated touch framebuffer; the software-renderer default is 1.
+
+## Ocean gestures
+
+`npm run test:gestures -- ../../out/browser-qa/extracted ../../out/browser-qa/gesture-results`
+checks actual mouse strokes and CDP touch drags on WebGPU and WebGL 2. Cases
+cover traveling-wave transport, both vortex directions, exactly one effect per
+stroke, frozen water pixels on pause, restart preservation, reset, secondary
+pointer rejection and cancellation. Screenshots include ambient water, a wave,
+and clockwise/counterclockwise swirls. `DRIFT_GESTURE_FILTER` optionally selects
+one case by name, such as `webgl2-touch`.
+`DRIFT_GESTURE_DPR=2` enables higher-resolution emulated touch captures; the
+report records the tested DPR (default 1, matching the rescue-course harness).
