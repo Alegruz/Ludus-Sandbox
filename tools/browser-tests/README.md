@@ -76,3 +76,26 @@ before the second. The exact comparison excludes the outer four CSS pixels of th
 which contain the independently composited focus outline; the fitted water is
 fully inside this region. Both comparison screenshots are saved.
 `DRIFT_GESTURE_SCALE=0.5` selects the CI framebuffer scale.
+
+## CI execution
+
+CI runs on pull requests and pushes to `main`; a new PR update cancels its
+superseded run. The build job packages one Release ZIP, and every browser job
+downloads and extracts that same artifact. Pixels, UI, waves and fallback run
+in one job. Gameplay and gestures run in four independent jobs:
+`webgpu-mouse`, `webgpu-touch`, `webgl2-mouse` and `webgl2-touch`.
+All jobs must succeed before the existing browser check passes.
+
+To reproduce one gameplay/gesture shard locally after extraction:
+
+```bash
+DRIFT_GAME_FILTER=webgpu-touch DRIFT_GAME_SCALE=0.5 npm run test:game -- ../../out/browser-qa/extracted ../../out/browser-qa/ripple-results
+DRIFT_GESTURE_FILTER=webgpu-touch DRIFT_GESTURE_SCALE=0.5 npm run test:gestures -- ../../out/browser-qa/extracted ../../out/browser-qa/gesture-results
+```
+
+Filters matching no cases fail. Omitting a filter still runs all four cases.
+`node --test cases.test.mjs` verifies selection without downloading browsers.
+Native dependencies, shader tools, compiler outputs and the pinned Emscripten
+toolchain are cached by their input identities. Setup regenerates local presets
+and uses the engine-managed CMake/Ninja; build trees and machine settings are
+not restored from caches.

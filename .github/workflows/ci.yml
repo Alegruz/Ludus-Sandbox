@@ -2,7 +2,9 @@ name: ci
 
 on:
   push:
+    branches: [main]
   pull_request:
+  workflow_dispatch:
 
 # The sandbox app consumes Ludus only through its installed SDK. CI is tiered:
 #   * fast          - no engine; formatting, clang-tidy and the standalone ocean
@@ -12,14 +14,26 @@ on:
 #                     links against the SDK and the Slang -> SPIR-V/WGSL build
 #                     works with the pinned toolchain (ubuntu-24.04 has the
 #                     glibc 2.38+ the pinned spirv-val needs).
-#   * web           - builds the browser (WebGPU/WebGL 2) Release package and uploads
-#                     it as an artifact.
+#   * web-build     - builds one browser Release ZIP for every browser test job.
+#   * browser-*     - test that exact ZIP; gameplay and gestures run separately
+#                     for each backend/input pair, preserving all four cases.
+#   * web           - retains the required check name and gates every browser job.
 #
 # The browser job verifies real software-GPU pixels; physical GPU and hosted
 # acceptance remain separate. See docs/VALIDATION.md.
 
 permissions:
   contents: read
+
+# Thanks to GitHub's "Concurrency" guidance: superseded PR checks can cancel.
+# https://docs.github.com/en/actions/concepts/workflows-and-actions/concurrency
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CI: "true"
+  CMAKE_BUILD_PARALLEL_LEVEL: "2"
 
 jobs:
   fast:
@@ -33,16 +47,19 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq clang-18 clang-format-18 clang-tidy-18
 
-      - name: Setup regression tests
-        run: python3 -m unittest discover -s scripts/python -p 'test_*.py'
-
       - name: Verify source formatting
         run: |
           files=$(git ls-files 'src/*.cpp' 'src/*.h' 'src/**/*.cpp' 'src/**/*.h' 'tests/**/*.cpp' 'tools/**/*.cpp')
           echo "Checking: $files"
           clang-format-18 --dry-run --Werror $files
 
-      - name: Test release bootstrap contracts
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+      - name: Test exhaustive browser shard selection
+        run: node --test tools/browser-tests/cases.test.mjs
+
+      - name: Test setup and release bootstrap contracts
         run: python3 -m unittest discover -s scripts/python -p 'test_*.py' -v
 
       - name: Build and run the GPU-free logic tests
@@ -71,30 +88,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install system prerequisites
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq \
-            git python3 python3-venv ca-certificates \
-            clang-18 lld-18 clang-format-18 clang-tidy-18 \
-            libwayland-dev wayland-protocols
-
-      - name: Cache pip downloads
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/pip
-          key: pip-${{ runner.os }}-sandbox
-
-      - name: Install CMake + Ninja for driving the presets
-        # The generated user preset points CMAKE_MAKE_PROGRAM at the engine's
-        # managed ninja; we just need a cmake/ctest front-end on PATH.
-        run: pipx install cmake ninja || pip install --user cmake ninja
-
-      - name: Acquire Ludus SDK + pinned shader tools and configure
-        # Pins the engine revision (config/ludus-version.txt), acquires the
-        # pinned Slang + SPIRV-Tools, installs the SDK and writes
-        # CMakeUserPresets.json wiring the SDK prefix and shader tools.
-        run: ./init.sh
+      - uses: ./.github/actions/sdk-setup
 
       - name: Build the native ocean app (shader -> SPIR-V/WGSL + link)
         run: cmake --build --preset linux-clang-development --parallel 2
@@ -115,8 +109,8 @@ jobs:
           test -f "$shader_dir/ocean.fragment.spv"
           test -f "$shader_dir/ocean.wgsl"
 
-  web:
-    name: Browser SDK build + package (WebGPU + WebGL 2)
+  web-build:
+    name: Build browser SDK and Release package
     needs: fast
     runs-on: ubuntu-24.04
     timeout-minutes: 40
@@ -128,36 +122,34 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install system prerequisites
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq \
-            git python3 python3-venv ca-certificates \
-            clang-18 lld-18 clang-format-18 clang-tidy-18 \
-            libwayland-dev wayland-protocols
-
-      - name: Cache pip downloads
-        uses: actions/cache@v4
+      - uses: ./.github/actions/sdk-setup
         with:
-          path: ~/.cache/pip
-          key: pip-${{ runner.os }}-sandbox
-
-      - name: Install CMake + Ninja for driving the presets
-        run: pipx install cmake ninja || pip install --user cmake ninja
-
-      - name: Acquire Ludus SDK (native + web) + pinned shader tools and configure
-        # The engine web SDK is installed and the browser preset is enabled when
-        # the web SDK prefix and the emsdk toolchain are present.
-        run: ./init.sh --with-web
+          web: 'true'
 
       - name: Build the browser ocean package
         run: cmake --build --preset web-emscripten-release --parallel 2
 
-      - name: Package and extract the exact Release payload
-        run: |
-          ./scripts/package-web
-          python3 -m zipfile -e out/packages/drift-ocean-web-release.zip out/browser-qa/extracted
+      - name: Package the exact Release payload
+        run: ./scripts/package-web
+      - uses: actions/upload-artifact@v4
+        with:
+          name: drift-ocean-web-release
+          path: out/packages/drift-ocean-web-release.zip
+          if-no-files-found: error
 
+  browser-smoke:
+    name: Browser pixels, UI, waves and fallback
+    needs: web-build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: drift-ocean-web-release
+          path: out/packages
+      - name: Extract the exact Release payload
+        run: python3 -m zipfile -e out/packages/drift-ocean-web-release.zip out/browser-qa/extracted
       - uses: actions/setup-node@v4
         with:
           node-version: '22.16.0'
@@ -168,13 +160,11 @@ jobs:
         run: |
           npm ci
           npx playwright install --with-deps chromium
-      - name: Verify ocean pixels and fallback in the exact ZIP
+      - name: Verify pixels, UI, waves and fallback in the exact ZIP
         working-directory: tools/browser-tests
         run: |
           npm test
           DRIFT_UI_SCALE=0.5 npm run test:ui -- ../../out/browser-qa/extracted ../../out/browser-qa/ui-results
-          DRIFT_GAME_SCALE=0.5 npm run test:game -- ../../out/browser-qa/extracted ../../out/browser-qa/ripple-results
-          DRIFT_GESTURE_SCALE=0.5 npm run test:gestures -- ../../out/browser-qa/extracted ../../out/browser-qa/gesture-results
           npm run test:waves -- ../../out/browser-qa/extracted ../../out/browser-qa/wave-results
       - uses: actions/upload-artifact@v4
         if: always()
@@ -183,12 +173,72 @@ jobs:
           path: |
             out/browser-qa/results/
             out/browser-qa/ui-results/
-            out/browser-qa/ripple-results/
-            out/browser-qa/gesture-results/
             out/browser-qa/wave-results/
           if-no-files-found: warn
-      - uses: actions/upload-artifact@v4
+
+  browser-game:
+    name: Browser gameplay and gestures (${{ matrix.case }})
+    needs: web-build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        case: [webgpu-mouse, webgpu-touch, webgl2-mouse, webgl2-touch]
+    env:
+      DRIFT_GAME_FILTER: ${{ matrix.case }}
+      DRIFT_GESTURE_FILTER: ${{ matrix.case }}
+      DRIFT_GAME_SCALE: "0.5"
+      DRIFT_GESTURE_SCALE: "0.5"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
         with:
           name: drift-ocean-web-release
-          path: out/packages/drift-ocean-web-release.zip
-          if-no-files-found: error
+          path: out/packages
+      - name: Extract the exact Release payload
+        run: python3 -m zipfile -e out/packages/drift-ocean-web-release.zip out/browser-qa/extracted
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+          cache: npm
+          cache-dependency-path: tools/browser-tests/package-lock.json
+      - name: Install pinned browser test dependencies
+        working-directory: tools/browser-tests
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+      - name: Verify all courses, replay and gestures in the exact ZIP
+        working-directory: tools/browser-tests
+        run: |
+          npm run test:game -- ../../out/browser-qa/extracted ../../out/browser-qa/ripple-results
+          npm run test:gestures -- ../../out/browser-qa/extracted ../../out/browser-qa/gesture-results
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: drift-ocean-browser-evidence-${{ matrix.case }}
+          path: |
+            out/browser-qa/ripple-results/
+            out/browser-qa/gesture-results/
+          if-no-files-found: warn
+
+  web:
+    # Retain the existing check name and require every shard, even on failures.
+    name: Browser SDK build + package (WebGPU + WebGL 2)
+    needs: [web-build, browser-smoke, browser-game]
+    if: always()
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Require the build and every browser test job to succeed
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          python3 - <<'PYTHON'
+          import json
+          import os
+          results = json.loads(os.environ['RESULTS'])
+          failed = {name: job['result'] for name, job in results.items() if job['result'] != 'success'}
+          if failed:
+              raise SystemExit(f"Browser validation did not succeed: {failed}")
+          print('All browser CI gates passed.')
+          PYTHON
