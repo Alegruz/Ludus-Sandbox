@@ -111,10 +111,10 @@ struct OceanSettings final
     float32 FoamAmount = 0.35F;
 
     // --- Palette (restrained: deep navy, blue, teal, warm pale foam) ---
-    Color DeepColor = {.R = 0.027F, .G = 0.075F, .B = 0.184F};    // deep navy
-    Color MidColor = {.R = 0.067F, .G = 0.270F, .B = 0.420F};     // ocean blue
-    Color ShallowColor = {.R = 0.133F, .G = 0.520F, .B = 0.540F}; // teal
-    Color FoamColor = {.R = 0.925F, .G = 0.953F, .B = 0.898F};    // warm pale foam
+    Color DeepColor = {.R = 0.031F, .G = 0.118F, .B = 0.165F};    // ink navy
+    Color MidColor = {.R = 0.063F, .G = 0.247F, .B = 0.302F};     // painted ocean blue
+    Color ShallowColor = {.R = 0.157F, .G = 0.427F, .B = 0.439F}; // muted teal
+    Color FoamColor = {.R = 0.953F, .G = 0.933F, .B = 0.863F};    // parchment foam
 };
 
 // Numeric bounds (inclusive). Exposed so UI and tests share one source.

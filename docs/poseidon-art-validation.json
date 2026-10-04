@@ -1,0 +1,273 @@
+{
+  "game": "Poseidon Saves the Day",
+  "integrated_validation": {
+    "package_sha256": "9746ce17d968521a2fba0f39fadf9b4d26814f64377c0f50d4dd12fd5c084f21",
+    "engine_revision": "4732a79b4e753dd7cfc14b4b96b846ce3b1033b6",
+    "native_build": "passed with warnings as errors",
+    "release_web_build": "passed with warnings as errors",
+    "ctest": "2/2 passed",
+    "asan_ubsan": "2/2 sandbox test targets passed; installed SDK libraries were reused",
+    "clang_format_18": "all tracked C++ passed",
+    "clang_tidy_18": "changed production C++ passed with native/wasm compilation databases",
+    "setup_regressions": "25/25 passed",
+    "setup_doctor": "selectable native/web configure/build presets and native test preset, SDKs and IDE tools verified",
+    "mobile_ui_cases": 10,
+    "mobile_ui_result": "all passed on WebGPU/WebGL 2, emulated touch, software GPU, render scale 0.5",
+    "current_acceptance": "Full browser suites are run by PR CI against the pinned SDK and exact Release ZIP."
+  },
+  "historical_art_pass": {
+    "game": "Poseidon Saves the Day",
+    "package_sha256": "8230189a4cea17ad6fca4aebc05a6bfdd1a7908bfa64fdad03b419b7f16c2c35",
+    "browser": "140.0.7339.186",
+    "renderer": "SwiftShader (software GPU)",
+    "browser_raf_delay_ms": 1000,
+    "browser_cases": [
+      {
+        "name": "webgpu: real ocean pixels, controls, pause, restart",
+        "status": "passed",
+        "pixelVariation": 57.96846986418684
+      },
+      {
+        "name": "webgl2: real ocean pixels, controls, pause, restart",
+        "status": "passed",
+        "pixelVariation": 57.96846986418684
+      },
+      {
+        "name": "WebGPU and WebGL 2 ocean orientation and palette agree",
+        "status": "passed",
+        "meanPixelDifference": 0
+      },
+      {
+        "name": "Auto fallback after missing",
+        "status": "passed",
+        "backend": "webgl2"
+      },
+      {
+        "name": "Auto fallback after adapter",
+        "status": "passed",
+        "backend": "webgl2"
+      },
+      {
+        "name": "Auto fallback after device",
+        "status": "passed",
+        "backend": "webgl2"
+      },
+      {
+        "name": "Auto fallback after surface",
+        "status": "passed",
+        "backend": "webgl2"
+      },
+      {
+        "name": "forced WebGPU fails explicitly without fallback",
+        "status": "passed"
+      },
+      {
+        "name": "both unavailable: readable narrow error and restart",
+        "status": "passed"
+      },
+      {
+        "name": "narrow responsive controls, DPR, iframe",
+        "status": "passed"
+      },
+      {
+        "name": "WebGL 2 loss, restart and repeated resize",
+        "status": "passed",
+        "loseContext": true
+      },
+      {
+        "name": "network failure index.js",
+        "status": "passed"
+      },
+      {
+        "name": "network failure index.wasm",
+        "status": "passed"
+      }
+    ],
+    "checks": {
+      "native_build": "passed with -Werror",
+      "release_web_build": "passed with -Werror",
+      "native_ctest": "3/3 passed",
+      "asan_ubsan": "81 ocean and 2340 ripple checks passed",
+      "clang_format_18": "passed",
+      "clang_tidy_18": "passed (native and wasm target configurations)",
+      "shader_validation": "SPIR-V, WGSL and GLSL ES generated; spirv-val passed",
+      "setup_and_release_regressions": "25/25 passed",
+      "development_web_build": "passed with -Werror"
+    },
+    "gesture_checks": {
+      "webgpu": {
+        "mouse": "passed",
+        "touch": "passed",
+        "raf_delay_ms": {
+          "mouse": 100,
+          "touch": 500
+        }
+      },
+      "webgl2": {
+        "mouse": "passed",
+        "touch": "passed",
+        "raf_delay_ms": {
+          "mouse": 2000,
+          "touch": 2000
+        }
+      },
+      "note": "Gesture checks used the same final shader before the settings-button ARIA update. Final package controls and modes passed the browser cases above."
+    },
+    "limitations": [
+      "Software-GPU frame delays bound test rendering; they do not measure production frame rate.",
+      "Physical mobile, hardware GPU, native presentation and hosted itch.io acceptance remain unverified.",
+      "The initial 50 ms game run ended with a closed-browser/context error. WebGL gesture captures at 100/500 ms hit screenshot timeouts under concurrent software-renderer load; the gesture rerun at 2000 ms passed.",
+      "The full-course pointer playthrough timed out during channel traversal at a 250 ms test delay; full channel completion/replay remain unverified by this art-pass run."
+    ],
+    "shader": {
+      "compiler": {
+        "license": "Apache-2.0 WITH LLVM-exception",
+        "sha256": "bcffdccca2c16057d39f290a07f6f237b9a765238afc1974b68d09762e874b09",
+        "url": "https://github.com/shader-slang/slang/releases/download/v2026.1.2/slang-2026.1.2-linux-x86_64-glibc-2.27.tar.gz",
+        "version": "2026.1.2"
+      },
+      "glsl_es_entries": {
+        "fragment": "main",
+        "vertex": "main"
+      },
+      "glsl_es_layout": {
+        "alignment": 16,
+        "binding": 0,
+        "block": "OceanUniforms_std140",
+        "offsets": {
+          "boatInfo": 144,
+          "boatMotion": 736,
+          "currentDirCos": 48,
+          "currentDirSin": 52,
+          "currentOffset": 24,
+          "deepColor": 80,
+          "dockInfo": 448,
+          "flow": 768,
+          "flowInfo": 752,
+          "foamAmount": 44,
+          "foamColor": 128,
+          "gameInfo": 160,
+          "levelBounds": 432,
+          "levelInfo": 464,
+          "midColor": 96,
+          "pad0": 56,
+          "pad1": 60,
+          "pad2": 64,
+          "resolution": 0,
+          "ripple0": 176,
+          "ripple1": 192,
+          "ripple10": 336,
+          "ripple11": 352,
+          "ripple12": 368,
+          "ripple13": 384,
+          "ripple14": 400,
+          "ripple15": 416,
+          "ripple2": 208,
+          "ripple3": 224,
+          "ripple4": 240,
+          "ripple5": 256,
+          "ripple6": 272,
+          "ripple7": 288,
+          "ripple8": 304,
+          "ripple9": 320,
+          "rock0": 480,
+          "rock1": 496,
+          "rock10": 640,
+          "rock11": 656,
+          "rock12": 672,
+          "rock13": 688,
+          "rock14": 704,
+          "rock15": 720,
+          "rock2": 512,
+          "rock3": 528,
+          "rock4": 544,
+          "rock5": 560,
+          "rock6": 576,
+          "rock7": 592,
+          "rock8": 608,
+          "rock9": 624,
+          "shallowColor": 112,
+          "waveAnimationSpeed": 36,
+          "waveIntensity": 40,
+          "waveScaleMeters": 32,
+          "waveTime": 16,
+          "worldView": 8
+        },
+        "size": 3840
+      },
+      "glsl_es_translator": {
+        "commit": "2275d0efc4f2fa46851035d9d3c67c105bc8b99e",
+        "source_sha256": "7d1de24918bea9897753f7561d4d154f68ec89c36bb70c13598222b8039d4212",
+        "tag": "vulkan-sdk-1.4.313.0"
+      },
+      "layout": "See separate per-target reflection JSON; never assume packing equality.",
+      "profiles": {
+        "glsl_es": "300 es",
+        "spirv": "spirv_1_3",
+        "wgsl": "sm_6_0"
+      },
+      "sha256": {
+        "ocean.fragment.essl": "f035f55e36ae69ab4fa10d297eb164866f65a00f4b6ebe418a1f8a0f5254f20b",
+        "ocean.fragment.glsl-es.spv": "875e2d3586cac907baa4d4e390fae2f2be66d8c256d388d1ca39e4b6467ed075",
+        "ocean.fragment.spv": "cad7f6a26192c18b53b2da286029e77ed84a22358f8c0e2f9dd9add33547e56b",
+        "ocean.vertex.essl": "5853232c2da534e758c1fce5496b126f7af76a54c2a0c7518b0f3ae9f6698f5e",
+        "ocean.vertex.glsl-es.spv": "3723516347ab4716e200751260b866e5b461c40e644f319deb427a684a7742c8",
+        "ocean.vertex.spv": "3723516347ab4716e200751260b866e5b461c40e644f319deb427a684a7742c8",
+        "ocean.wgsl": "9d223ebc4037f2f6e8163ce01d5283b86cf2f2982de822b0f966eac20a4c1537"
+      },
+      "spirv_entries": {
+        "fragment": "main",
+        "vertex": "main"
+      },
+      "uniform_sizes": {
+        "fragment": 3840,
+        "glsl_es": 3840,
+        "vertex": 3840,
+        "wgsl": 3840
+      },
+      "wgsl_entries": {
+        "fragment": "fragmentMain",
+        "vertex": "vertexMain"
+      }
+    },
+    "gameplay_check": {
+      "backend": "webgpu",
+      "input": "mouse",
+      "raf_delay_ms": 250,
+      "passed": [
+        "first-course rescue",
+        "rock collision and Retry",
+        "second-course rescue",
+        "transition into channel",
+        "channel dock clear of desktop HUD"
+      ],
+      "result": "Error: Timeout: complete course with pointer ripples",
+      "last_state": {
+        "x": "-10.733193743884945",
+        "y": "9.837564905932135",
+        "placements": "22",
+        "contacts": "22",
+        "ticks": "1372",
+        "rings": "1",
+        "energy": "0",
+        "curl": "0",
+        "divergence": "0",
+        "height": "0",
+        "result": "0",
+        "cooldown": "0",
+        "paused": "false",
+        "enabled": "true",
+        "vx": "1.9334684841778127",
+        "vy": "0.7851339689894908",
+        "docking": "0",
+        "crash": "0",
+        "phase": "playing",
+        "course": "3",
+        "courseCount": "3",
+        "complete": "false"
+      },
+      "note": "The channel was still playing after 1372 simulation ticks when the 300-second wall-clock deadline elapsed. Full channel completion and replay were not verified in this run."
+    },
+    "scope": "Historical art-pass validation before integration with wind waves, the fluid SDK and mobile HUD; current PR checks validate the combined version."
+  }
+}

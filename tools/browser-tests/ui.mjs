@@ -97,7 +97,7 @@ try {
     await page.screenshot({path: resolve(output, backend + '-safe-area.png')});
     await page.locator('#mode').click();
     await until(() => state(page), s => s.enabled === 'false', 'ocean mode');
-    assert.equal(await page.locator('#mode').textContent(), 'Boat');
+    assert.equal(await page.locator('#mode').textContent(), 'Rescue');
     await page.locator('#help-toggle').click();
     assert(await page.locator('#game-instructions').isVisible(), 'Ocean help has no instructions');
     assert.match(await page.locator('#game-instructions').textContent(), /Drag to build a current/);

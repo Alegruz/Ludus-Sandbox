@@ -1,8 +1,8 @@
-# Ludus-Sandbox — Drift ripple boat
+# Ludus-Sandbox — Poseidon Saves the Day
 
 External sandbox application for developing and validating the Ludus engine SDK.
 
-This checkout contains **Drift**, a top-down 2D water playground with a three-course
+This checkout contains **Poseidon Saves the Day**, a top-down 2D water playground with a three-course
 boat rescue game. Tap for a finite splash and spreading gravity waves, drag to add momentum,
 or stir to build circulation. A nonlinear shallow-water solver evolves wind
 swells, interference, reflected waves and transported foam. Boat drag samples
@@ -16,7 +16,12 @@ Rendering uses one procedural fullscreen pass authored in Slang, compiled to
 SPIR-V for native Vulkan, WGSL for WebGPU, and generated GLSL ES for WebGL 2.
 Game rules and state live in this repository and consume the installed Ludus SDK.
 
-![Finite splashes propagate and overlap on the simulated surface](docs/screenshots/ocean-waves-overlap.png)
+The art follows the nautical storybook banner: ink navy, teal pigment washes,
+cream surf, ochre timber and warm stone. The responsive HUD uses the same palette.
+Marketing artwork and unaltered gameplay captures live in
+[assets/itch/poseidon-saves-the-day](assets/itch/poseidon-saves-the-day).
+
+![Painted water and a wooden rescue boat](docs/screenshots/poseidon-flow-swirl.png)
 
 The browser build is the playable target. Native compilation is verified, but
 native pointer controls have not been connected. All three courses, docking,
@@ -46,6 +51,7 @@ and a fresh-player trial remain open.
 | Doc | Contents |
 | --- | --- |
 | [docs/BUILD.md](docs/BUILD.md) | Exact, reproducible build / run / package commands (native + web), required engine revision and SDK variant. |
+| [Art validation](docs/poseidon-art-validation.json) | Artifact identity, checks and remaining acceptance for the banner-inspired art pass. |
 | [docs/DESIGN.md](docs/DESIGN.md) | World units, coordinate orientation, aspect-correct mapping, current/time continuity, architecture, and the uniform contract. |
 | [Ripple game design](docs/RIPPLE_GAME_DESIGN.md) | Boat, ripple steering, hazards, docking, touch controls, and first levels. |
 | [Ripple game architecture](docs/RIPPLE_GAME_ARCHITECTURE.md) | Simulation timing, input, collision, shader snapshot, and engine/host boundaries. |

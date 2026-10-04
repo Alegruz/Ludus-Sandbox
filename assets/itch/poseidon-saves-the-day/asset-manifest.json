@@ -1,0 +1,50 @@
+[
+  {
+    "filename": "background.png",
+    "width": 1672,
+    "height": 941,
+    "bytes": 1919033,
+    "sha256": "1a331386c34274927eee33a225fb983585e9f72c4bba9613c8abe3e4ea8f5f23",
+    "kind": "AI-generated-promotional-artwork"
+  },
+  {
+    "filename": "banner.png",
+    "width": 2172,
+    "height": 724,
+    "bytes": 2183639,
+    "sha256": "76f33c17a4e80f904c6c3001964659ebaf52d55c87f0362fb6d968101618c923",
+    "kind": "AI-generated-promotional-artwork"
+  },
+  {
+    "filename": "embed-bg.png",
+    "width": 1672,
+    "height": 941,
+    "bytes": 2019627,
+    "sha256": "4fa8300a5fcc3ad2df5d117f56944cae1ace0fad11c3921eec47ccf71a383c0d",
+    "kind": "AI-generated-promotional-artwork"
+  },
+  {
+    "filename": "screenshot-01-swirl.png",
+    "width": 960,
+    "height": 600,
+    "bytes": 540258,
+    "sha256": "d6a2d2c2a3cf3f6f0e07645ce77096263d631a52a704bafa9c3af487f12533b9",
+    "kind": "gameplay-capture"
+  },
+  {
+    "filename": "screenshot-02-rescue.png",
+    "width": 844,
+    "height": 390,
+    "bytes": 312383,
+    "sha256": "765efd549e750ffdc95ef6d04a5b856059b209dd74f3ce740d4ea94e1b82ef4e",
+    "kind": "gameplay-capture"
+  },
+  {
+    "filename": "screenshot-03-channel.png",
+    "width": 960,
+    "height": 540,
+    "bytes": 486557,
+    "sha256": "62939cd306958e3ce5ed394ca68657adab85074b7da59ba73fb832c8442a314f",
+    "kind": "gameplay-capture"
+  }
+]
