@@ -73,3 +73,10 @@ fix that synchronizes selected wind settings immediately on graphics reset.
 CI rebuilds and reruns the full browser suite on the published tree. These
 checks use software rendering and are separate from physical-device or
 fresh-player acceptance.
+
+An initial CI touch pilot collided while crossing too late before the second
+gate in The Rapids. The browser pilot now crosses farther upstream and schedules
+corrections every 30 simulation ticks, matching the native route pilot's cadence.
+All three rescues and Replay pass on the final package with WebGPU touch at CI's
+0.5 render scale. This changes test navigation, retaining the authored levels,
+collision rules and success assertions.

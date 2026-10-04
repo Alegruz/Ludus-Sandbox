@@ -176,7 +176,7 @@ try {
         }
       };
       const steer = async (waypoints, terminal, timeout = 300000) => {
-        let lastStroke = 0;
+        let lastStroke = -30;
         let waypoint = 0;
         const deadline = Date.now() + timeout;
         while (Date.now() < deadline) {
@@ -193,11 +193,13 @@ try {
           const ex = distance > 0.01 ? dx / distance * speed - Number(boat.vx) : -Number(boat.vx);
           const ey = distance > 0.01 ? dy / distance * speed - Number(boat.vy) : -Number(boat.vy);
           const error = Math.hypot(ex, ey);
-          if (Date.now() - lastStroke > 500 && error > 0.45) {
+          // Keep the correction cadence tied to simulation time. Software-GPU
+          // frame timing must not change how often this pointer pilot steers.
+          if (Number(boat.ticks) - lastStroke >= 30 && error > 0.45) {
             const ux = ex / error, uy = ey / error;
             await dragWorld({x: Number(boat.x) - ux * 3, y: Number(boat.y) - uy * 3},
               {x: Number(boat.x) + ux * 3, y: Number(boat.y) + uy * 3});
-            lastStroke = Date.now();
+            lastStroke = Number(boat.ticks);
           }
           await delay(70);
         }
@@ -205,9 +207,12 @@ try {
       };
       const route = course => {
         const bottom = -72 - course * 16;
-        const marks = [[10,27],[10,38],[10,53],[-5,57],[-5,68],[-5,82],
-          [course === 2 ? 5 : 10,88],[course === 2 ? 5 : 10,98],[10,112],
-          [-8,116],[-8,128],[-8,142],[9,147],[9,158],[9,174]];
+        // Cross as soon as the preceding hull clears its gate, leaving room to
+        // brake the upward current before the next rock. The rapids need that
+        // headroom; waiting farther downstream made CI's touch pilot collide.
+        const marks = [[10,27],[10,38],[10,48],[-5,50],[-5,68],[-5,78],
+          [course === 2 ? 5 : 10,80],[course === 2 ? 5 : 10,98],[10,108],
+          [-8,110],[-8,128],[-8,138],[9,140],[9,158],[9,174]];
         return marks.slice(0, [9,12,15][course]).map(([x,y]) => ({x, y:bottom+y}))
           .concat({x:course===1 ? -9 : 9, y:-bottom-13});
       };
