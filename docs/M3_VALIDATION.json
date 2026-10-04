@@ -7,7 +7,7 @@
     "src/game/ripple_game.h": "a7565f56c4a99173f3552bdcde061af9006e931f5a4d9ac6db4b1769deb860a3",
     "src/game/ripple_game.cpp": "a6d6e661eeed8dede9068441383b84c0c077ca858335456100a5fd57a3fa73c5",
     "src/ocean/ocean_scene.h": "c04ef602d9848c4c1ac21b87ba10b1c9d88c0e39069b38a8db91f6cfb0323cd5",
-    "src/main_web.cpp": "1bb0372400cff817f5bffae4f70ff219a270950d44c0f3423f8e488d3c02929c",
+    "src/main_web.cpp": "587bf42fbe0288eda2a639a14849d2ce0ca4ea851834543200772d5ff4b5cf77",
     "web/shell.html": "330338a188f447f2e674de14c78abf9183cf3c60cadb1106d346375b364a1a50",
     "shaders/ocean.slang": "061c639a60d8cfe3ea3aad61689ed103add9ae58deb8ce7f5cc1814c9955a726"
   },

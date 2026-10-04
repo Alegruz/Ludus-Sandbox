@@ -28,6 +28,7 @@
 
 using ludus::foundation::float32;
 using ludus::foundation::float64;
+using ludus::foundation::int32;
 using ludus::foundation::uint32;
 
 namespace
@@ -86,7 +87,7 @@ EM_JS(void, PublishSettings, (const char* json), {
 EM_JS(void, PresentGame, (float64 x, float64 y, uint32 placements, uint32 contacts, uint32 ticks,
                          uint32 rings, uint32 waves, uint32 vortices, uint32 result, float64 cooldown, int paused, int enabled,
                          uint32 phase, uint32 crash, float64 vx, float64 vy, float64 docking,
-                         uint32 course, uint32 courseCount, int complete, const char* title, const char* instruction), {
+                         uint32 course, uint32 courseCount, int32 complete, const char* title, const char* instruction), {
     const hud = document.getElementById('game-status');
     if (!hud) return;
     Object.assign(hud.dataset, {x, y, placements, contacts, ticks, rings, waves, vortices, result, cooldown,
@@ -213,7 +214,7 @@ EMSCRIPTEN_KEEPALIVE int DriftStroke(float64 x, float64 y, uint32 phase) noexcep
 {
     return static_cast<int>(gScene.Stroke(x, y, phase));
 }
-EMSCRIPTEN_KEEPALIVE int DriftNextCourse() noexcept
+EMSCRIPTEN_KEEPALIVE int32 DriftNextCourse() noexcept
 {
     return gScene.NextCourse() ? 1 : 0;
 }
