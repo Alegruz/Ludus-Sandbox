@@ -5,7 +5,7 @@ on:
   pull_request:
 
 # The sandbox app consumes Ludus only through its installed SDK. CI is tiered:
-#   * fast          - no engine; formatting, clang-tidy and the GPU-free logic
+#   * fast          - no engine; formatting, clang-tidy and the standalone ocean
 #                     tests. This is the quick gate for most changes.
 #   * native        - acquires the pinned Ludus SDK + shader tools, builds the
 #                     native (Vulkan) app and shader, runs ctest. Proves the app
@@ -52,16 +52,12 @@ jobs:
             src/ocean/ocean_settings.cpp src/ocean/ocean_clock.cpp src/ocean/ocean_uniforms.cpp \
             -o ocean_tests
           ./ocean_tests
-          clang++-18 -std=c++23 -Wall -Wextra -Wpedantic -Werror -fno-exceptions -I src \
-            tests/ripple_tests.cpp src/game/ripple_game.cpp src/game/water_field.cpp src/game/game_render.cpp \
-            src/ocean/ocean_settings.cpp src/ocean/ocean_uniforms.cpp -o ripple_tests
-          ./ripple_tests
 
-      - name: Static analysis (clang-tidy) on the GPU-free ocean sources
+      - name: Static analysis (clang-tidy) on SDK-independent sources
         run: |
           clang-tidy-18 \
             src/ocean/ocean_settings.cpp src/ocean/ocean_clock.cpp src/ocean/ocean_uniforms.cpp \
-            src/game/ripple_game.cpp src/game/water_field.cpp src/game/game_render.cpp \
+            src/game/ripple_game.cpp src/game/game_render.cpp \
             --warnings-as-errors='*' \
             -- -std=c++23 -I src
 
@@ -105,6 +101,9 @@ jobs:
 
       - name: Run tests
         run: ctest --test-dir out/build/linux-clang-development --output-on-failure
+
+      - name: Analyze the production fluid adapter against the installed SDK
+        run: clang-tidy-18 src/game/water_field.cpp -p out/build/linux-clang-development --warnings-as-errors='*'
 
       - name: Confirm shader artifacts are present in the build
         run: |

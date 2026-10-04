@@ -35,8 +35,8 @@ struct WaterDiagnostics final
     float64 MaxHeight = 0.0;
 };
 
-// Staggered velocity / cell-centered free surface. Owns one bounded allocation;
-// reset, forcing, sampling and stepping reuse it. No renderer dependencies.
+// SDK-backed staggered velocity / cell-centered free surface. Initialization
+// allocates; reset, forcing, sampling and stepping reuse storage. No renderer dependencies.
 class WaterField final
 {
 public:

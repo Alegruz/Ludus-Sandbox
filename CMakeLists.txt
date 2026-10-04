@@ -27,7 +27,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # GPU-free ocean logic shared by every target (settings, clock, uniforms,
-# coordinate mapping). Testable without an SDK/GPU.
+# coordinate mapping). The adapter consumes the installed CPU fluid SDK; no GPU is required.
 add_library(ludus_sandbox_ocean STATIC
     src/ocean/ocean_settings.cpp
     src/ocean/ocean_clock.cpp
@@ -41,7 +41,7 @@ target_compile_features(ludus_sandbox_ocean PUBLIC cxx_std_23)
 # When linked against the SDK, use the engine numeric aliases from the real
 # <ludus/foundation/base/types.h>.
 target_compile_definitions(ludus_sandbox_ocean PUBLIC LUDUS_SANDBOX_WITH_SDK)
-target_link_libraries(ludus_sandbox_ocean PUBLIC Ludus::FoundationBase Ludus::FoundationMath)
+target_link_libraries(ludus_sandbox_ocean PUBLIC Ludus::FoundationBase Ludus::FoundationMath Ludus::PhysicsFluid)
 target_compile_options(ludus_sandbox_ocean PRIVATE -ffp-contract=off)
 target_compile_options(ludus_sandbox_ocean PRIVATE -Wall -Wextra -Wpedantic -Werror -fno-exceptions)
 
@@ -91,10 +91,10 @@ endif()
 
 # ---------------------------------------------------------------------------
 # Focused host-side tests: settings validation, coordinate mapping, current/
-# time continuity, and the uniform layout static asserts. GPU-free and SDK-free
-# so they run on any C++23 host (appearance is verified interactively, not here).
+# time continuity, and the uniform layout static asserts. Ocean tests are
+# SDK-independent; gameplay tests use the production fluid SDK without a GPU.
 # ---------------------------------------------------------------------------
-option(LUDUS_SANDBOX_BUILD_TESTS "Build the GPU-free ocean logic tests" ON)
+option(LUDUS_SANDBOX_BUILD_TESTS "Build GPU-free ocean and SDK fluid gameplay tests" ON)
 if(LUDUS_SANDBOX_BUILD_TESTS AND NOT EMSCRIPTEN)
     add_executable(ludus_sandbox_ocean_tests
         tests/ocean_tests.cpp
@@ -107,20 +107,13 @@ if(LUDUS_SANDBOX_BUILD_TESTS AND NOT EMSCRIPTEN)
     target_include_directories(ludus_sandbox_ocean_tests PRIVATE src)
     target_compile_features(ludus_sandbox_ocean_tests PRIVATE cxx_std_23)
     target_compile_options(ludus_sandbox_ocean_tests PRIVATE -Wall -Wextra -Wpedantic -Werror -fno-exceptions)
-    add_executable(ludus_sandbox_ripple_tests
-        tests/ripple_tests.cpp src/game/ripple_game.cpp src/game/water_field.cpp src/game/game_render.cpp
-        src/ocean/ocean_uniforms.cpp src/ocean/ocean_settings.cpp)
-    target_include_directories(ludus_sandbox_ripple_tests PRIVATE src)
-    target_compile_features(ludus_sandbox_ripple_tests PRIVATE cxx_std_23)
+    # Fluid simulation is exercised through the installed production SDK.
+    add_executable(ludus_sandbox_ripple_tests tests/ripple_tests.cpp)
+    target_link_libraries(ludus_sandbox_ripple_tests PRIVATE ludus_sandbox_ocean)
     target_compile_options(ludus_sandbox_ripple_tests PRIVATE -Wall -Wextra -Wpedantic -Werror -fno-exceptions)
-    # Verify the real production SDK path in addition to the SDK-free oracle.
-    add_executable(ludus_sandbox_ripple_sdk_tests tests/ripple_tests.cpp)
-    target_link_libraries(ludus_sandbox_ripple_sdk_tests PRIVATE ludus_sandbox_ocean)
-    target_compile_options(ludus_sandbox_ripple_sdk_tests PRIVATE -Wall -Wextra -Wpedantic -Werror -fno-exceptions)
     enable_testing()
     add_test(NAME ludus_sandbox_ocean_tests COMMAND ludus_sandbox_ocean_tests)
     add_test(NAME ludus_sandbox_ripple_tests COMMAND ludus_sandbox_ripple_tests)
-    add_test(NAME ludus_sandbox_ripple_sdk_tests COMMAND ludus_sandbox_ripple_sdk_tests)
 endif()
 
 include(cmake/GameRelease.cmake)
