@@ -145,8 +145,9 @@ rhi::FrameStatus OceanScene::RenderFrame(const platform::browser::WindowState& i
     // Seed the uniform before the first draw (required by the contract). We fill
     // it with the current extent; GetFrameInfo may refine it after BeginFrame.
     const auto buildUniforms = [&](uint32 w, uint32 h) noexcept {
-        return mGameEnabled ? game::BuildUniforms(settings, mClock, w, h, mGame, IsPaused() || !mFocused || !mVisible)
-                            : ocean::BuildUniforms(settings, mClock, w, h);
+        auto value = game::BuildUniforms(settings, mClock, w, h, mGame, IsPaused() || !mFocused || !mVisible);
+        value.GameInfo[0] = mGameEnabled ? 1.0F : 0.0F;
+        return value;
     };
     ocean::OceanUniforms uniforms = buildUniforms(width, height);
     const auto uploadBytes = [&uniforms]() noexcept {
@@ -286,10 +287,10 @@ SceneState OceanScene::Tick() noexcept
     // Advance the simulation using only VISIBLE time. SetVisible from the driver
     // can also force-freeze; combine both signals.
     const bool visible = mVisible && input.Visible && mFocused;
+    (void)mGame.SetSeaState(mStore->Get().WaveIntensity);
     const auto previousTicks = mGame.Ticks();
-    mGame.Advance(delta, visible && !IsPaused() && mGameEnabled);
-    const float64 visualDelta =
-        mGameEnabled ? static_cast<float64>(mGame.Ticks() - previousTicks) * game::kTickSeconds : delta;
+    mGame.Advance(delta, visible && !IsPaused(), mGameEnabled);
+    const float64 visualDelta = static_cast<float64>(mGame.Ticks() - previousTicks) * game::kTickSeconds;
     // Gameplay advances the ocean on committed ticks, never ahead of its rings.
     ocean::Advance(mClock, mStore->Get(), visualDelta, visible);
 

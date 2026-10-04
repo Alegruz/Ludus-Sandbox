@@ -72,7 +72,7 @@ struct PhysicsSettings final
 {
     Point WaterVelocity;
     float64 DragRate = 0.7;     // Per second.
-    float64 PushSpeed = 2.5;    // Delta velocity at the ripple center.
+    float64 PushSpeed = 2.5;    // Finite splash pressure strength.
     float64 MaxBoatSpeed = 7.0; // World-relative gameplay limit.
 };
 
@@ -165,7 +165,11 @@ public:
     {
         return mWater;
     }
-    void Advance(float64 delta, bool running) noexcept;
+    [[nodiscard]] bool SetSeaState(float64 strength) noexcept
+    {
+        return mWater.SetSeaState(strength);
+    }
+    void Advance(float64 delta, bool running, bool gameplay = true) noexcept;
     void CancelInput() noexcept;
     void Reset() noexcept;
     void Tick() noexcept;

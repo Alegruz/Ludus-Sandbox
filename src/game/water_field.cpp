@@ -9,13 +9,13 @@ namespace ludus::sandbox::game
 {
 namespace
 {
-constexpr usize kWidth = 48;
-constexpr usize kHeight = 64;
+constexpr usize kWidth = kWaterWidth;
+constexpr usize kHeight = kWaterHeight;
 constexpr usize kCells = kWidth * kHeight;
 constexpr usize kUFaces = (kWidth + 1) * kHeight;
 constexpr usize kVFaces = kWidth * (kHeight + 1);
 constexpr float64 kGravity = 9.8;
-constexpr float64 kDepth = 2.0;
+constexpr float64 kDepth = 4.0;
 constexpr float64 kMaxSpeed = 10.0;
 constexpr float64 kBrushRadius = 4.0;
 struct Cell final
@@ -29,6 +29,21 @@ struct Cell final
 {
     return y * kWidth + x;
 }
+struct SplashSource final
+{
+    Point Center;
+    float64 Strength = 0.0;
+    float64 Age = 0.28;
+};
+struct SeaMode final
+{
+    float64 Basis[kCells]{};
+    float64 Kx = 0.0;
+    float64 Ky = 0.0;
+    float64 Omega = 0.0;
+    float64 Phase = 0.0;
+    float64 Amplitude = 0.0;
+};
 struct GridSize final
 {
     usize Width;
@@ -68,6 +83,11 @@ struct WaterField::Storage final
     float64 Dx = 1.25;
     float64 Dy = 1.25;
     bool Active = false;
+    float64 SeaStrength = 0.0;
+    float64 Time = 0.0;
+    float64 Pressure[kCells]{};
+    SeaMode Modes[8]{};
+    SplashSource Splashes[16]{};
 
     [[nodiscard]] bool Fluid(usize x, usize y) const noexcept
     {
@@ -155,7 +175,50 @@ struct WaterField::Storage final
     }
     void Step(float64 dt) noexcept
     {
-        const float64 damping = std::exp(-0.12 * dt);
+        Time += dt;
+        std::fill_n(Pressure, kCells, 0.0);
+        // Wind pressure drives standing gravity modes of the closed basin. All
+        // subsequent motion, rock reflection and interaction come from the PDE.
+        for (const auto& mode : Modes)
+        {
+            if (SeaStrength <= 0.0)
+            {
+                break;
+            }
+            if (mode.Omega <= 0.0)
+            {
+                continue;
+            }
+            const float64 forcing =
+                SeaStrength * mode.Amplitude * 0.06 * kGravity / mode.Omega * std::sin(mode.Phase + mode.Omega * Time);
+            for (usize i = 0; i < kCells; ++i)
+            {
+                Pressure[i] += mode.Basis[i] * forcing;
+            }
+        }
+        for (auto& splash : Splashes)
+        {
+            if (splash.Age >= 0.28)
+            {
+                continue;
+            }
+            const float64 interval = std::min(dt, 0.28 - splash.Age);
+            const float64 phase = (splash.Age + interval * 0.5) / 0.28 * 3.141592653589793;
+            const float64 pulse = std::sin(phase);
+            const float64 pressure = splash.Strength * 80.0 * pulse * pulse * interval / dt;
+            splash.Age += interval;
+            for (usize y = 0; y < kHeight; ++y)
+            {
+                for (usize x = 0; x < kWidth; ++x)
+                {
+                    const float64 rx = (static_cast<float64>(x) + 0.5) * Dx - HalfExtent.X - splash.Center.X;
+                    const float64 ry = (static_cast<float64>(y) + 0.5) * Dy - HalfExtent.Y - splash.Center.Y;
+                    const float64 footprint = std::max(1.0 - (rx * rx + ry * ry) / 36.0, 0.0);
+                    Pressure[CellIndex(x, y)] += pressure * footprint * footprint * footprint;
+                }
+            }
+        }
+        const float64 damping = std::exp(-0.06 * dt);
         // Semi-Lagrangian self-advection of staggered momentum, then free-surface
         // pressure. No incompressible projection: divergence must drive height.
         for (usize y = 0; y < kHeight; ++y)
@@ -170,7 +233,9 @@ struct WaterField::Storage final
                                   (static_cast<float64>(y) + 0.5) * Dy - HalfExtent.Y};
                     const Point back = Departure(p, dt);
                     const float64 advected = Velocity(back).X;
-                    const float64 gradient = (Cells[CellIndex(x, y)].Height - Cells[CellIndex(x - 1, y)].Height) / Dx;
+                    const usize right = CellIndex(x, y), left = CellIndex(x - 1, y);
+                    const float64 gradient =
+                        (Cells[right].Height - Cells[left].Height + (Pressure[right] - Pressure[left]) / kGravity) / Dx;
                     NextU[index] = std::clamp((advected - kGravity * gradient * dt) * damping, -kMaxSpeed, kMaxSpeed);
                 }
             }
@@ -187,7 +252,9 @@ struct WaterField::Storage final
                                   static_cast<float64>(y) * Dy - HalfExtent.Y};
                     const Point back = Departure(p, dt);
                     const float64 advected = Velocity(back).Y;
-                    const float64 gradient = (Cells[CellIndex(x, y)].Height - Cells[CellIndex(x, y - 1)].Height) / Dy;
+                    const usize top = CellIndex(x, y), bottom = CellIndex(x, y - 1);
+                    const float64 gradient =
+                        (Cells[top].Height - Cells[bottom].Height + (Pressure[top] - Pressure[bottom]) / kGravity) / Dy;
                     NextV[index] = std::clamp((advected - kGravity * gradient * dt) * damping, -kMaxSpeed, kMaxSpeed);
                 }
             }
@@ -211,7 +278,14 @@ struct WaterField::Storage final
                         std::clamp((material.DisplacementX + p.X - back.X) * std::exp(-0.035 * dt), -12.0, 12.0);
                     next.DisplacementY =
                         std::clamp((material.DisplacementY + p.Y - back.Y) * std::exp(-0.035 * dt), -12.0, 12.0);
-                    const float64 source = std::max(-Divergence(x, y) - 0.08, 0.0) * 0.9;
+                    const float64 hx = (Cells[CellIndex(std::min(x + 1, kWidth - 1), y)].Height -
+                                        Cells[CellIndex(x > 0 ? x - 1 : x, y)].Height) /
+                                       (2.0 * Dx);
+                    const float64 hy = (Cells[CellIndex(x, std::min(y + 1, kHeight - 1))].Height -
+                                        Cells[CellIndex(x, y > 0 ? y - 1 : y)].Height) /
+                                       (2.0 * Dy);
+                    const float64 breaking = std::max(std::hypot(hx, hy) - 0.25, 0.0) * 2.0;
+                    const float64 source = std::max(-Divergence(x, y) - 0.08, 0.0) * 0.3 + breaking;
                     next.Foam = std::clamp(material.Foam * std::exp(-0.65 * dt) + source * dt, 0.0, 1.0);
                 }
             }
@@ -225,12 +299,21 @@ struct WaterField::Storage final
                 const usize index = CellIndex(x, y);
                 if (!Solid[index])
                 {
-                    // Conservative face-flux difference; closed faces give no
-                    // mass flux through rocks or the edge of the water.
+                    // Nonlinear shallow-water continuity: upwind total depth
+                    // on each shared face. Closed faces have exactly zero flux.
+                    const auto depth = [&](usize cx, usize cy) noexcept {
+                        return kDepth + Cells[CellIndex(cx, cy)].Height;
+                    };
+                    const float64 left = U[y * (kWidth + 1) + x];
+                    const float64 right = U[y * (kWidth + 1) + x + 1];
+                    const float64 bottom = V[y * kWidth + x];
+                    const float64 top = V[(y + 1) * kWidth + x];
+                    const float64 leftFlux = left * depth(left > 0.0 && x > 0 ? x - 1 : x, y);
+                    const float64 rightFlux = right * depth(right < 0.0 && x + 1 < kWidth ? x + 1 : x, y);
+                    const float64 bottomFlux = bottom * depth(x, bottom > 0.0 && y > 0 ? y - 1 : y);
+                    const float64 topFlux = top * depth(x, top < 0.0 && y + 1 < kHeight ? y + 1 : y);
                     NextCells[index].Height =
-                        std::clamp((Cells[index].Height - kDepth * dt * Divergence(x, y)) * std::exp(-0.06 * dt),
-                                   -3.0,
-                                   3.0);
+                        Cells[index].Height - dt * ((rightFlux - leftFlux) / Dx + (topFlux - bottomFlux) / Dy);
                 }
             }
         }
@@ -280,7 +363,12 @@ bool WaterField::Reset(const LevelDefinition& level) noexcept
     s.HalfExtent = level.HalfExtent;
     s.Dx = level.HalfExtent.X * 2.0 / static_cast<float64>(kWidth);
     s.Dy = level.HalfExtent.Y * 2.0 / static_cast<float64>(kHeight);
-    s.Active = false;
+    s.Active = s.SeaStrength > 0.0;
+    s.Time = 0.0;
+    for (auto& splash : s.Splashes)
+    {
+        splash = {};
+    }
     for (usize y = 0; y < kHeight; ++y)
     {
         for (usize x = 0; x < kWidth; ++x)
@@ -294,6 +382,75 @@ bool WaterField::Reset(const LevelDefinition& level) noexcept
                     std::hypot(p.X - level.Rocks[i].Center.X, p.Y - level.Rocks[i].Center.Y) <= level.Rocks[i].Radius;
             }
             s.Solid[CellIndex(x, y)] = solid;
+        }
+    }
+    constexpr usize frequencies[8][2] = {{2, 3}, {4, 1}, {3, 6}, {6, 4}, {8, 2}, {5, 9}, {9, 7}, {11, 5}};
+    float64 mean = 0.0;
+    usize wetCells = 0;
+    for (usize m = 0; m < 8; ++m)
+    {
+        auto& mode = s.Modes[m];
+        mode.Kx = static_cast<float64>(frequencies[m][0]) * 3.141592653589793 / (s.HalfExtent.X * 2.0);
+        mode.Ky = static_cast<float64>(frequencies[m][1]) * 3.141592653589793 / (s.HalfExtent.Y * 2.0);
+        mode.Omega = std::sqrt(kGravity * kDepth * (mode.Kx * mode.Kx + mode.Ky * mode.Ky));
+        mode.Phase = static_cast<float64>(m) * 2.399963229728653;
+        mode.Amplitude = 0.52 / std::sqrt(static_cast<float64>(m + 1));
+        for (usize y = 0; y < kHeight; ++y)
+        {
+            for (usize x = 0; x < kWidth; ++x)
+            {
+                const usize index = CellIndex(x, y);
+                mode.Basis[index] = std::cos((static_cast<float64>(x) + 0.5) * s.Dx * mode.Kx) *
+                                    std::cos((static_cast<float64>(y) + 0.5) * s.Dy * mode.Ky);
+                if (!s.Solid[index])
+                {
+                    s.Cells[index].Height += s.SeaStrength * mode.Amplitude * mode.Basis[index] * std::cos(mode.Phase);
+                }
+            }
+        }
+        const float64 velocity = s.SeaStrength * mode.Amplitude * kGravity / mode.Omega * std::sin(mode.Phase);
+        for (usize y = 0; y < kHeight; ++y)
+        {
+            for (usize x = 1; x < kWidth; ++x)
+            {
+                if (s.OpenU(x, y))
+                {
+                    s.U[y * (kWidth + 1) + x] += velocity * mode.Kx *
+                                                 std::sin(static_cast<float64>(x) * s.Dx * mode.Kx) *
+                                                 std::cos((static_cast<float64>(y) + 0.5) * s.Dy * mode.Ky);
+                }
+            }
+        }
+        for (usize y = 1; y < kHeight; ++y)
+        {
+            for (usize x = 0; x < kWidth; ++x)
+            {
+                if (s.OpenV(x, y))
+                {
+                    s.V[y * kWidth + x] += velocity * mode.Ky *
+                                           std::cos((static_cast<float64>(x) + 0.5) * s.Dx * mode.Kx) *
+                                           std::sin(static_cast<float64>(y) * s.Dy * mode.Ky);
+                }
+            }
+        }
+    }
+    for (usize i = 0; i < kCells; ++i)
+    {
+        if (!s.Solid[i])
+        {
+            mean += s.Cells[i].Height;
+            ++wetCells;
+        }
+    }
+    if (wetCells > 0)
+    {
+        mean /= static_cast<float64>(wetCells);
+        for (usize i = 0; i < kCells; ++i)
+        {
+            if (!s.Solid[i])
+            {
+                s.Cells[i].Height -= mean;
+            }
         }
     }
     return true;
@@ -365,6 +522,43 @@ bool WaterField::Stroke(Point start, Point end) noexcept
     s.Active = true;
     return true;
 }
+bool WaterField::Splash(Point center, float64 strength) noexcept
+{
+    if (mStorage == nullptr || !std::isfinite(center.X) || !std::isfinite(center.Y) ||
+        std::abs(center.X) >= mStorage->HalfExtent.X || std::abs(center.Y) >= mStorage->HalfExtent.Y ||
+        !std::isfinite(strength) || std::abs(strength) > 8.0)
+    {
+        return false;
+    }
+    if (strength == 0.0)
+    {
+        return true;
+    }
+    for (auto& splash : mStorage->Splashes)
+    {
+        if (splash.Age >= 0.28)
+        {
+            splash = {.Center = center, .Strength = strength, .Age = 0.0};
+            mStorage->Active = true;
+            return true;
+        }
+    }
+    return false;
+}
+bool WaterField::SetSeaState(float64 strength) noexcept
+{
+    if (mStorage == nullptr || !std::isfinite(strength) || strength < 0.0 || strength > 1.0)
+    {
+        return false;
+    }
+    mStorage->SeaStrength = strength;
+    mStorage->Active |= strength > 0.0;
+    return true;
+}
+float64 WaterField::SeaState() const noexcept
+{
+    return mStorage != nullptr ? mStorage->SeaStrength : 0.0;
+}
 void WaterField::Advance(float64 seconds) noexcept
 {
     if (mStorage == nullptr || !mStorage->Active || !std::isfinite(seconds) || seconds <= 0.0 || seconds > kTickSeconds)
@@ -373,8 +567,13 @@ void WaterField::Advance(float64 seconds) noexcept
     }
     auto& s = *mStorage;
     // Conservative CFL bound includes the velocity cap and gravity wave speed.
+    float64 maxDepth = kDepth;
+    for (usize i = 0; i < kCells; ++i)
+    {
+        maxDepth = std::max(maxDepth, kDepth + s.Cells[i].Height);
+    }
     const auto steps = static_cast<usize>(
-        std::ceil(seconds * (kMaxSpeed + std::sqrt(kGravity * kDepth)) / (0.45 * std::min(s.Dx, s.Dy))));
+        std::ceil(seconds * (kMaxSpeed + std::sqrt(kGravity * maxDepth)) / (0.3 * std::min(s.Dx, s.Dy))));
     for (usize i = 0; i < steps; ++i)
     {
         s.Step(seconds / static_cast<float64>(steps));
@@ -399,6 +598,15 @@ WaterSample WaterField::Sample(Point world) const noexcept
             cell.DisplacementY,
             s.Curl(world),
             s.Divergence(x, y)};
+}
+WaterSurface WaterField::SurfaceCell(usize x, usize y) const noexcept
+{
+    if (!Active() || !mStorage->Fluid(x, y))
+    {
+        return {};
+    }
+    const auto& cell = mStorage->Cells[CellIndex(x, y)];
+    return {cell.Height, cell.Foam};
 }
 WaterDiagnostics WaterField::Diagnostics() const noexcept
 {

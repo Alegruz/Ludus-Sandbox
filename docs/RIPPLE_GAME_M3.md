@@ -1,5 +1,8 @@
 # Drift: three-course rescue game
 
+> Historical course validation. Reset now seeds ambient waves and boat motion
+> comes from the fluid velocity. See [Ocean interactions](OCEAN_INTERACTIONS.md).
+
 Implemented October 3, 2026. The browser game now starts with an open-water
 lesson, continues around a rock, and ends in a staggered channel. Every course
 uses the existing ripple, swipe-wave and circular-current controls. This is the

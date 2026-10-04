@@ -1,5 +1,10 @@
 # Drift ocean validation
 
+The current fluid solver and rendered surface are described in
+[Ocean interactions](OCEAN_INTERACTIONS.md), with local evidence in
+[OCEAN_WAVES_VALIDATION.json](OCEAN_WAVES_VALIDATION.json). The older build
+identities and validation records below remain historical.
+
 The current M0/M1 boat and ripple slice has its own [implementation and validation record](RIPPLE_GAME_IMPLEMENTATION.md). The ocean-only evidence below describes the earlier baseline.
 
 The WebGL fallback work consumes the public installed SDK from [engine PR #56](https://github.com/Alegruz/Ludus/pull/56).

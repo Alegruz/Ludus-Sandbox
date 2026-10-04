@@ -110,7 +110,7 @@ EM_JS(void, PresentGame, (float64 x, float64 y, uint32 placements, uint32 contac
     const headingText = 'Course ' + course + ' / ' + courseCount + ' \u2014 ' + UTF8ToString(title);
     if (heading.textContent !== headingText) heading.textContent = headingText;
     const instructions = document.getElementById('game-instructions');
-    const instructionText = UTF8ToString(instruction) + ' Drag the water to build a current; stir to turn it.';
+    const instructionText = UTF8ToString(instruction) + ' Drag to build a current; stir to turn it. Tap for splashes.';
     if (instructions.textContent !== instructionText) instructions.textContent = instructionText;
     const feedback = ['Tap for ripples. Drag to move the water. Stir to turn it.', 'Ripple queued.', 'Ripple sent.',
                       'Ripple recharging...', 'Too many ripples. Wait a moment.',

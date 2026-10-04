@@ -7,7 +7,7 @@ ocean playground, plus the required engine revision and SDK variant.
 
 | Item | Value | Where |
 | --- | --- | --- |
-| Ludus revision | `9554d051b2125580327d9f89c06395798a53028d` ([engine PR #64](https://github.com/Alegruz/Ludus/pull/64), checked dynamics kernels; includes WebGL 2 fallback) | `config/ludus-version.txt` |
+| Ludus revision | `1ca7f07cc0dd7a2d369fd059712428644623f53e` ([engine PR #67](https://github.com/Alegruz/Ludus/pull/67), 16 KiB fullscreen uniforms; includes checked dynamics and WebGL 2 fallback) | `config/ludus-version.txt` |
 | SDK variant | `linux-clang-development` (native) / `web-emscripten-release` (browser SDK; development and release app presets) | `scripts/python/sandbox.py` (`SDK_VARIANT`) |
 | Slang compiler | `2026.1.2` | engine `config/shader_toolchain.json` |
 | SPIRV-Cross | `vulkan-sdk-1.4.313.0` (source archive + built binary digest verified) | engine `config/spirv_cross_toolchain.json` |

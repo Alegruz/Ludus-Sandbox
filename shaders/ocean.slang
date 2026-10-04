@@ -7,7 +7,11 @@
 // fullscreen-rendering-handoff.md).
 //
 // The CPU mirror of this layout is src/ocean/ocean_uniforms.h; the two must
-// agree (offsets asserted on the C++ side). set/group 0, binding 0, 3840 bytes.
+// agree (offsets asserted on the C++ side). set/group 0, binding 0, 16128 bytes.
+
+#ifndef LUDUS_GLSL_ES
+#define LUDUS_GLSL_ES 0
+#endif
 
 struct OceanUniforms
 {
@@ -71,34 +75,12 @@ struct OceanUniforms
     float4 rock15; // center.xy, radius, reserved
     float4 boatMotion; // velocity.xy, speed, reserved
     float4 flowInfo; // snapshot dimensions, signed velocity/height ranges
-    float4 flow[192]; // two cells per vec4; momentum/height and foam/material map
+    float4 flow[192]; // coarse transport: momentum and advected material map
+    float4 surface[768]; // full 48 x 64 surface: 16-bit height, 8-bit foam
 
 };
 
 [[vk::binding(0, 0)]] ConstantBuffer<OceanUniforms> ocean;
-
-float4 rippleAt(int index)
-{
-    switch (index)
-    {
-        case 0: return ocean.ripple0;
-        case 1: return ocean.ripple1;
-        case 2: return ocean.ripple2;
-        case 3: return ocean.ripple3;
-        case 4: return ocean.ripple4;
-        case 5: return ocean.ripple5;
-        case 6: return ocean.ripple6;
-        case 7: return ocean.ripple7;
-        case 8: return ocean.ripple8;
-        case 9: return ocean.ripple9;
-        case 10: return ocean.ripple10;
-        case 11: return ocean.ripple11;
-        case 12: return ocean.ripple12;
-        case 13: return ocean.ripple13;
-        case 14: return ocean.ripple14;
-        default: return ocean.ripple15;
-    }
-}
 
 // Decode before interpolation: packed channels are exact 24-bit integers.
 float3 unpackChannels(float packed)
@@ -133,7 +115,7 @@ FlowSample fieldAt(float2 world)
     result.height = 0.0;
     result.foam = 0.0;
     result.displacement = float2(0.0, 0.0);
-    if (ocean.gameInfo.x < 0.5 || ocean.flowInfo.z <= 0.0 || any(abs(world) >= ocean.levelBounds.xy)) return result;
+    if (ocean.flowInfo.z <= 0.0 || any(abs(world) >= ocean.levelBounds.xy)) return result;
     float2 grid = (world / ocean.levelBounds.xy * 0.5 + 0.5) * ocean.flowInfo.xy - 0.5;
     int2 cell = int2(floor(grid));
     float2 f = frac(grid);
@@ -143,6 +125,51 @@ FlowSample fieldAt(float2 world)
     result.height = lerp(lerp(a.height, b.height, f.x), lerp(c.height, d.height, f.x), f.y);
     result.foam = lerp(lerp(a.foam, b.foam, f.x), lerp(c.foam, d.foam, f.x), f.y);
     result.displacement = lerp(lerp(a.displacement, b.displacement, f.x), lerp(c.displacement, d.displacement, f.x), f.y);
+    return result;
+}
+
+struct SurfaceSample
+{
+    float height;
+    float foam;
+    float2 slope;
+};
+float2 surfaceCell(int2 cell)
+{
+    cell = clamp(cell, int2(0, 0), int2(47, 63));
+    int index = cell.y * 48 + cell.x;
+    float packed = ocean.surface[index / 4][index % 4];
+    return float2((fmod(packed, 65536.0) - 32768.0) / 32767.0 * 6.0,
+                  floor(packed / 65536.0) / 255.0);
+}
+SurfaceSample surfaceAt(float2 world)
+{
+    SurfaceSample result;
+    result.height = 0.0;
+    result.foam = 0.0;
+    result.slope = float2(0.0, 0.0);
+    if (ocean.flowInfo.z <= 0.0 || any(abs(world) >= ocean.levelBounds.xy)) return result;
+    float2 spacing = ocean.levelBounds.xy * 2.0 / float2(48.0, 64.0);
+    float2 grid = (world + ocean.levelBounds.xy) / spacing - 0.5;
+    int2 center = int2(floor(grid + 0.5));
+    float2 f = grid - float2(center);
+    // Quadratic B-spline reconstruction gives continuous, analytic normals
+    // from nine real height samples. Foam uses the same positive weights.
+    float3 wx = float3(0.5 * pow(0.5 - f.x, 2.0), 0.75 - f.x * f.x, 0.5 * pow(0.5 + f.x, 2.0));
+    float3 wy = float3(0.5 * pow(0.5 - f.y, 2.0), 0.75 - f.y * f.y, 0.5 * pow(0.5 + f.y, 2.0));
+    float3 dx = float3(f.x - 0.5, -2.0 * f.x, f.x + 0.5);
+    float3 dy = float3(f.y - 0.5, -2.0 * f.y, f.y + 0.5);
+    for (int j = 0; j < 3; ++j)
+    {
+        for (int i = 0; i < 3; ++i)
+        {
+            float2 sample = surfaceCell(center + int2(i - 1, j - 1));
+            float weight = wx[i] * wy[j];
+            result.height += sample.x * weight;
+            result.foam += sample.y * weight;
+            result.slope += sample.x * float2(dx[i] * wy[j], wx[i] * dy[j]) / spacing;
+        }
+    }
     return result;
 }
 
@@ -199,19 +226,6 @@ float valueNoise(float2 p)
     return lerp(lerp(a, b, u.x), lerp(c, d, u.x), u.y);
 }
 
-// Two octaves only: broad, slowly varying patches (no dense noise).
-float broadField(float2 p)
-{
-    return valueNoise(p) * 0.65 + valueNoise(p * 2.03 + 7.1) * 0.35;
-}
-
-// A directional sinusoidal wave band.
-float waveBand(float2 world, float2 dir, float wavelength, float phase)
-{
-    float k = 6.2831853 / max(wavelength, 0.001);
-    return sin(dot(world, dir) * k + phase);
-}
-
 [shader("fragment")]
 float4 fragmentMain(float4 position : SV_Position) : SV_Target0
 {
@@ -227,103 +241,50 @@ float4 fragmentMain(float4 position : SV_Position) : SV_Target0
     world.x = (position.x - res.x * 0.5) * metersPerPixel;
     world.y = (res.y * 0.5 - position.y) * metersPerPixel; // flip Y
 
-    FlowSample flow = fieldAt(world);
-    float2 surfaceWorld = world - flow.displacement;
-    float2 cellSize = ocean.levelBounds.xy * 2.0 / max(ocean.flowInfo.xy, float2(1.0, 1.0));
-    float2 difference = max(cellSize * 0.5, float2(0.1, 0.1));
-    float2 interactionSlope = float2(
-        fieldAt(world + float2(difference.x, 0.0)).height - fieldAt(world - float2(difference.x, 0.0)).height,
-        fieldAt(world + float2(0.0, difference.y)).height - fieldAt(world - float2(0.0, difference.y)).height) / (difference * 2.0);
-    float interactionHeight = flow.height;
-    // Foam is produced by compression, transported and dissipated in the solver.
-    // The material map also bends the fine ripples; no authored spiral geometry.
-    float interactionFoam = smoothstep(0.015, 0.28, flow.foam) *
-                            (0.45 + 0.55 * valueNoise(surfaceWorld * 1.5));
     float pixelWidth = max(metersPerPixel, 0.035);
-    for (int i = 0; i < 16; ++i)
-    {
-        if (float(i) >= ocean.gameInfo.y) break;
-        float4 ring = rippleAt(i);
-        float2 relative = world - ring.xy;
-        float distance = length(relative);
-        float band = distance - ring.z;
-        float envelope = 1.0 - smoothstep(0.8, 2.4, abs(band));
-        float height = cos(band * 2.8) * envelope * ring.w * 0.5;
-        interactionHeight += height;
-        interactionSlope -= relative / max(distance, 0.1) * sin(band * 2.8) * envelope * ring.w * 1.4;
-        interactionFoam += (1.0 - smoothstep(0.08, 0.3 + pixelWidth, abs(band))) * ring.w * 0.55;
-    }
-
-    float2 advected = surfaceWorld - ocean.currentOffset;
-    float patchScale = ocean.waveScaleMeters * 2.6;
-    float patches = broadField(advected / patchScale + float2(ocean.waveTime * 0.015, -ocean.waveTime * 0.011));
-    patches = patches * 0.7 +
-              broadField(advected / (patchScale * 2.7) + float2(-ocean.waveTime * 0.006, ocean.waveTime * 0.009)) * 0.3;
-
-    float2 dirA = float2(ocean.currentDirCos, ocean.currentDirSin);
-    float2 dirB = float2(dirA.x * 0.5736 - dirA.y * 0.8192, dirA.x * 0.8192 + dirA.y * 0.5736);
-    float2 dirC = float2(-0.8, 0.6);
+    FlowSample flow = fieldAt(world);
+    SurfaceSample surface = surfaceAt(world);
+    float2 surfaceWorld = world - flow.displacement;
     float t = ocean.waveTime;
-    float k = 6.2831853 / max(ocean.waveScaleMeters, 0.001);
-    // Long swells and shorter crossing waves have distinct phase velocities.
-    // Height derivatives supply lighting; a moving pattern is never boat velocity.
-    float phaseA = dot(surfaceWorld, dirA) * k - t * 1.7;
-    float phaseB = dot(surfaceWorld, dirB) * k * 1.59 - t * 2.1;
-    float phaseC = dot(surfaceWorld, dirC) * k * 3.1 - t * 2.8;
-    float2 tangentA = float2(-dirA.y, dirA.x);
-    float bending = dot(surfaceWorld, tangentA) * k * 0.65 - t * 0.4;
-    phaseA += sin(bending) * 0.45;
-    float wavesA = sin(phaseA);
-    float wavesB = sin(phaseB);
-    float waves = wavesA * 0.58 + wavesB * 0.30 + sin(phaseC) * 0.12;
-    float waveShade = waves * (0.16 + 0.35 * ocean.waveIntensity);
-    float amplitude = 0.3 + 1.4 * ocean.waveIntensity;
-    float2 slope = ((dirA + tangentA * cos(bending) * 0.2925) * cos(phaseA) * 0.58 + dirB * cos(phaseB) * 0.477 +
-                    dirC * cos(phaseC) * 0.372) * k * amplitude + interactionSlope;
+
+    // Sub-grid gravity ripples contribute only small normal detail. Resolved
+    // waves, splash interference and foam are entirely the simulated surface.
+    float2 slope = surface.slope;
+    for (int i = 0; i < 3; ++i)
+    {
+        float angle = 0.7 + float(i) * 1.83;
+        float2 direction = float2(cos(angle), sin(angle));
+        float frequency = (3.1 + float(i) * 1.7) * 10.0 / max(ocean.waveScaleMeters, 1.0);
+        float phase = dot(surfaceWorld - ocean.currentOffset, direction) * frequency -
+                      sqrt(9.8 * frequency) * t;
+        slope += direction * cos(phase) * 0.016 * ocean.waveIntensity;
+    }
     float3 normal = normalize(float3(-slope, 1.0));
-    float diffuse = dot(normal, normalize(float3(-0.4, 0.5, 0.85)));
-    float reflection = pow(max(dot(normal, normalize(float3(0.25, 0.35, 1.0))), 0.0), 24.0);
-    float level = clamp(patches + waveShade * 0.5 + interactionHeight * 0.20, 0.0, 1.0);
-
-    // Palette: deep navy -> ocean blue -> teal, as broad bands. A touch of
-    // contrast curve keeps the illustrated, posterized-but-smooth look.
-    float3 deep = ocean.deepColor.rgb;
-    float3 mid = ocean.midColor.rgb;
-    float3 shallow = ocean.shallowColor.rgb;
-    float banded = smoothstep(0.08, 0.92, level);
-    float3 color;
-    if (banded < 0.5)
-    {
-        color = lerp(deep, mid, smoothstep(0.0, 0.5, banded));
-    }
-    else
-    {
-        color = lerp(mid, shallow, smoothstep(0.5, 1.0, banded));
-    }
-
-    // Apply wave shading as light/dark on top of the band color.
-    color *= 0.68 + diffuse * 0.4;
-    color += waveShade * 0.09;
-    color += float3(0.36, 0.64, 0.70) * reflection * (0.06 + 0.12 * ocean.waveIntensity);
-    // Thin curved ridges and crossing wind ripples keep the water readable
-    // between sparse whitecaps. Their contrast follows the wave setting.
-    float crestLight = pow(wavesA * 0.5 + 0.5, 18.0);
-    float windRipple = pow(sin(phaseC) * 0.5 + 0.5, 10.0);
-    float ridgeBreak = 0.35 + 0.65 * valueNoise(advected / (ocean.waveScaleMeters * 0.35));
-    color += float3(0.24, 0.52, 0.56) * (crestLight * 0.26 + windRipple * 0.10) *
-             ridgeBreak * ocean.waveIntensity;
-
-    // Sparse BROKEN foam STREAKS along the crest lines of wave A, gated by a
-    // broad mask so foam appears as scattered dashes rather than dense sparkle
-    // or isolated dots. The crest term uses the band value (a line), not the
-    // product of two bands (which made a dot grid).
-    float crestLine = smoothstep(0.90 - ocean.waveIntensity * 0.12, 0.99, wavesA * 0.5 + 0.5);
-    float breakUp = broadField(advected / (ocean.waveScaleMeters * 0.5) + float2(-t * 0.05, t * 0.04));
-    float streak = crestLine * smoothstep(0.45, 0.75, breakUp); // break the line into dashes
-    float foamMask = broadField(advected / (ocean.waveScaleMeters * 2.0) + float2(t * 0.02, -t * 0.015));
-    float foamGate = smoothstep(1.0 - ocean.foamAmount * 1.1, 1.0, foamMask + ocean.foamAmount * 0.35);
-    float foam = clamp(streak * foamGate * ocean.waveIntensity + interactionFoam, 0.0, 1.0);
-    color = lerp(color, ocean.foamColor.rgb, foam * 0.9);
+    float3 view = normalize(float3(0.12, -0.18, 1.0));
+    float3 reflected = reflect(-view, normal);
+    float facing = max(dot(normal, view), 0.0);
+    float fresnel = 0.0204 + 0.9796 * pow(1.0 - facing, 5.0);
+    float3 sky = lerp(float3(0.65, 0.82, 0.92), float3(0.13, 0.35, 0.58), saturate(reflected.z));
+    float3 light = normalize(float3(-0.27, 0.32, 0.90));
+    float diffuse = max(dot(normal, light), 0.0);
+    float sun = pow(max(dot(reflected, light), 0.0), 70.0);
+    // Depth absorption, surface lighting and Fresnel reflection distinguish
+    // troughs from crests using the resolved height and slope.
+    float depth = 4.0 + surface.height;
+    float3 water = lerp(ocean.shallowColor.rgb, ocean.midColor.rgb, 1.0 - exp(-depth * 0.32));
+    water = lerp(water, ocean.deepColor.rgb, 0.12 + 0.16 * (1.0 - diffuse));
+    float3 color = water * (0.46 + diffuse * 0.76);
+    color = lerp(color, sky, fresnel + 0.07);
+    color += float3(1.0, 0.91, 0.70) * sun * 0.65;
+    // A broad reflected skylight follows slope, keeping every wave readable in
+    // this top-down camera without unrelated large-scale noise color patches.
+    float skylight = pow(max(dot(reflected, normalize(float3(0.22, 0.34, 0.91))), 0.0), 18.0);
+    color += float3(0.24, 0.40, 0.44) * skylight * 0.45;
+    float crest = smoothstep(0.03, 0.32, surface.height);
+    color += float3(0.05, 0.13, 0.15) * crest;
+    float foam = smoothstep(0.015, 0.45, surface.foam) * ocean.foamAmount *
+                 (0.72 + 0.28 * valueNoise(surfaceWorld * 2.4));
+    color = lerp(color, ocean.foamColor.rgb, foam * 0.94);
 
     // Gentle vignette keeps contrast for future boats/debris at the center.
     float2 c = ndc - 0.5;
@@ -371,17 +332,7 @@ float4 fragmentMain(float4 position : SV_Position) : SV_Target0
         float ca = cos(ocean.boatInfo.z), sa = sin(ocean.boatInfo.z);
         float2 boat = float2(dot(relative, float2(ca, sa)), dot(relative, float2(-sa, ca)));
         float radius = ocean.boatInfo.w;
-        float speed = ocean.boatMotion.z;
-        float behind = -boat.x - radius * 0.7;
-        float wakeLength = 3.0 + min(speed, 7.0) * 2.5;
-        float wakeEnvelope = smoothstep(0.0, 1.0, behind) * (1.0 - smoothstep(1.0, wakeLength, behind));
-        float wakeWidth = radius * 0.45 + max(behind, 0.0) * 0.24;
-        float wakeLine = 1.0 - smoothstep(0.08, 0.3 + pixelWidth, abs(abs(boat.y) - wakeWidth));
-        float wakeBreak = 0.55 + 0.45 * sin(behind * 2.0 - t * 4.0);
-        float wake = wakeLine * wakeEnvelope * wakeBreak * min(speed / 2.5, 0.8);
-        color = lerp(color, ocean.foamColor.rgb, wake);
-        boat.y += fieldAt(ocean.boatInfo.xy).height * 0.2 +
-                  sin(dot(ocean.boatInfo.xy, dirA) * k - t * 1.7) * ocean.waveIntensity * 0.15;
+        boat.y += surfaceAt(ocean.boatInfo.xy).height * 0.35;
         float hullDistance = length(boat / float2(radius, radius * 0.62));
         float hull = 1.0 - smoothstep(0.94, 1.02, hullDistance);
         float shadow = 1.0 - smoothstep(0.9, 1.2, length((boat + float2(0.15, 0.20)) / float2(radius, radius * 0.62)));

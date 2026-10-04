@@ -1,5 +1,9 @@
 # Drift ripple boat game design
 
+> Historical design/validation record. The current shallow-water solver, finite
+> splashes, wave interference and full surface rendering supersede the analytic
+> ring force and shading described below. See [Ocean interactions](OCEAN_INTERACTIONS.md).
+
 Status: Game design, updated October 3, 2026. The ocean, boat, interactive
 ripples, swept hazards, docking, Retry and three-course progression are implemented.
 See the [three-course implementation record](RIPPLE_GAME_M3.md) for current

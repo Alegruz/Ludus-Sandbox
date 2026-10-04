@@ -1,0 +1,184 @@
+{
+  "engine_revision": "1ca7f07cc0dd7a2d369fd059712428644623f53e",
+  "sandbox_base": "ba0aef9a4acdf986712558c367675220bee2ac01",
+  "model": "48x64 staggered nonlinear shallow-water continuity with advected velocity; finite area/time pressure splashes",
+  "surface_uniform_bytes": 16128,
+  "shader_uniform_sizes": {
+    "fragment": 16128,
+    "glsl_es": 16128,
+    "vertex": 16128,
+    "wgsl": 16128
+  },
+  "package_sha256": "dcb0f73563a47188b55c36abb3611a8ddc26ec91a60c852a1b91b7e61af53159",
+  "payload_sha256": {
+    "NOTICE.txt": "f60b9d9cce417a683f59fad0627f4363fdfc1711b41c718c01c2f25e072484d7",
+    "iframe.html": "3047f3dad7bb5fafdefbb4573154766eb6998a0bdb01684671383f19a859ac8d",
+    "index.html": "22f73976b214b51c95b929af67b6772ff2a5933aee2f38a6d95d735d62a919a0",
+    "index.js": "b80629a69e7c6bcc541febcc7b3b2e868d365734c5c8df9ae993c71064c987e0",
+    "index.wasm": "42458ec33b81d246b379537f35545a6fb1adb3a0782bb865a688defae669a994",
+    "licenses/Emscripten-authors.txt": "8585fa1b981f576f52806833481323007ccac5c00f31a873215e31c0f42820f0",
+    "licenses/Emscripten.txt": "620a78084fc7ca97c0b5dea9abf891f3ffcadfdbf305276f099c9c4e12fc1d86",
+    "licenses/Ludus.txt": "d1c9edc550b43eb788b37a153f11e22e03cb6dad95986e70cb38d614ed98ce47",
+    "licenses/SPIRV-Cross.txt": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+    "licenses/compiler-rt.txt": "1a8f1058753f1ba890de984e48f0242a3a5c29a6a8f2ed9fd813f36985387e8d",
+    "licenses/emdawnwebgpu.txt": "2f79bf3699b0870251255b381670237f73f21a04a38c094f791eba39c5fd1df7",
+    "licenses/libcxx.txt": "539dd7aed86e8a4f12cbdd0e6c50c189c7d74847e4fecc64ce2c6ee3a01da38b",
+    "licenses/libcxxabi.txt": "e2b35be49f7284a45b7baca8fc7b3ab7440e7902392b2528a457816b5bb2a15c",
+    "licenses/musl.txt": "f9bc4423732350eb0b3f7ed7e91d530298476f8fec0c6c427a1c04ade22655af",
+    "licenses/webgpu-native.txt": "e213273be4a6a6da276757cb5bb728de139014b947f345b8af60253837ee6f14"
+  },
+  "native": {
+    "toolchain": "Clang 18, C++23, warnings-as-errors, no exceptions",
+    "ctest": "3/3 passed",
+    "fluid_checks_each_path": 5440,
+    "asan_ubsan_leaks": "5440 checks passed, no diagnostics",
+    "format": "clang-format 18 passed (Sandbox convention); Ludus scripts/check passed for engine",
+    "tidy": "pinned clang-tidy 18 passed on changed solver/render/scene translation units",
+    "setup_regressions": "25 passed; real configure/build/test presets listed and built"
+  },
+  "engine_ci": {
+    "ci": "success",
+    "browser_backends": "success",
+    "project_sdk": "success",
+    "release": "success",
+    "commit": "1ca7f07cc0dd7a2d369fd059712428644623f53e"
+  },
+  "browser": {
+    "renderers": {
+      "kind": "Software GPU only; hardware and hosted acceptance unverified",
+      "browser": "140.0.7339.186",
+      "cases": [
+        {
+          "name": "webgpu: real ocean pixels, controls, pause, restart",
+          "status": "passed"
+        },
+        {
+          "name": "webgl2: real ocean pixels, controls, pause, restart",
+          "status": "passed"
+        },
+        {
+          "name": "WebGPU and WebGL 2 ocean orientation and palette agree",
+          "status": "passed"
+        },
+        {
+          "name": "Auto fallback after missing",
+          "status": "passed",
+          "backend": "webgl2"
+        },
+        {
+          "name": "Auto fallback after adapter",
+          "status": "passed",
+          "backend": "webgl2"
+        },
+        {
+          "name": "Auto fallback after device",
+          "status": "passed",
+          "backend": "webgl2"
+        },
+        {
+          "name": "Auto fallback after surface",
+          "status": "passed",
+          "backend": "webgl2"
+        },
+        {
+          "name": "forced WebGPU fails explicitly without fallback",
+          "status": "passed"
+        },
+        {
+          "name": "both unavailable: readable narrow error and restart",
+          "status": "passed"
+        },
+        {
+          "name": "narrow responsive controls, DPR, iframe",
+          "status": "passed"
+        },
+        {
+          "name": "WebGL 2 loss, restart and repeated resize",
+          "status": "passed"
+        },
+        {
+          "name": "network failure index.js",
+          "status": "passed"
+        },
+        {
+          "name": "network failure index.wasm",
+          "status": "passed"
+        }
+      ]
+    },
+    "finite_splashes": {
+      "kind": "Software GPU, mouse and emulated touch",
+      "browser": "140.0.7339.186",
+      "cases": [
+        {
+          "backend": "webgpu",
+          "input": "mouse",
+          "status": "passed",
+          "between": -0.8385087984268657
+        },
+        {
+          "backend": "webgl2",
+          "input": "touch",
+          "status": "passed",
+          "between": -0.8385095057624832
+        }
+      ]
+    },
+    "baseline_gesture_matrix": {
+      "kind": "Software GPU; mouse and emulated touch",
+      "browser": "140.0.7339.186",
+      "cases": [
+        {
+          "name": "webgpu-mouse",
+          "status": "passed"
+        },
+        {
+          "name": "webgpu-touch",
+          "status": "passed"
+        },
+        {
+          "name": "webgl2-mouse",
+          "status": "passed"
+        },
+        {
+          "name": "webgl2-touch",
+          "status": "passed"
+        }
+      ]
+    },
+    "final_gesture_partial": {
+      "kind": "Software GPU; mouse and emulated touch",
+      "browser": "140.0.7339.186",
+      "cases": [
+        {
+          "name": "webgpu-mouse",
+          "status": "passed"
+        },
+        {
+          "name": "webgpu-touch",
+          "status": "passed"
+        }
+      ],
+      "failure": "TimeoutError: page.screenshot: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - taking page screenshot\u001b[22m\n\u001b[2m  - waiting for fonts to load...\u001b[22m\n\u001b[2m  - fonts loaded\u001b[22m\n"
+    },
+    "campaign": {
+      "kind": "Real software GPU, emulated touch; physical devices unverified",
+      "browser": "140.0.7339.186",
+      "cases": [
+        {
+          "name": "webgpu-mouse",
+          "status": "passed"
+        }
+      ],
+      "failure": "TimeoutError: page.screenshot: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - taking page screenshot\u001b[22m\n\u001b[2m  - waiting for fonts to load...\u001b[22m\n\u001b[2m  - fonts loaded\u001b[22m\n"
+    }
+  },
+  "notes": [
+    "13 rendering/fallback/resize/restart checks passed on package 4a98611fcd06970d983ee2967000be252c34c83e451132b6e8c2397b904aa74b. Subsequent source edits only added braces/explicit casts and updated instructions; the final splash suite verifies the corrected instructions and current surface on both backends.",
+    "Final package pin differs from the final splash-test build only in engine metadata; every listed payload hash is identical.",
+    "The four full-resolution gesture cases passed before the instruction/cast edits. Later screenshot repeats hit a 30-second software GPU timeout. The final packaged mouse campaign completed all three courses/replay at 0.5 render scale; the touch repeat hit the same screenshot timeout after a correct rock crash. Slower test-only RAF cadence and 60-second screenshot timeout now bound the CI software GPU workload.",
+    "Read-only field diagnostics and actual pointer events were used. No boat/velocity test setters steer the campaign.",
+    "Physical mobile input, hardware frame timing and hosted itch.io publication remain unverified.",
+    "Model limitations: depth-averaged coastal/basin waves; no deep-water dispersion, overturning breakers or airborne spray."
+  ]
+}

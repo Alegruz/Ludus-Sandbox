@@ -24,8 +24,9 @@ const server = createServer(async (request, response) => {
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 const base = `http://127.0.0.1:${server.address().port}`;
 const report = {kind: 'Software GPU; mouse and emulated touch', cases: [],
-  rafDelayMs: {mouse: 100, touch: 500},
+  rafDelayMs: {mouse: 500, touch: 500},
   touchDpr: Number(process.env.DRIFT_GESTURE_DPR || 1),
+  renderScale: Number(process.env.DRIFT_GESTURE_SCALE || 1),
   args: ['--enable-unsafe-webgpu', '--enable-features=Vulkan', '--use-webgpu-adapter=swiftshader',
     '--use-angle=swiftshader', '--use-vulkan=swiftshader', '--disable-vulkan-surface', '--enable-unsafe-swiftshader']};
 const state = page => page.locator('#game-status').evaluate(el => ({...el.dataset}));
@@ -47,11 +48,12 @@ try {
       const name = backend + (mobile ? '-touch' : '-mouse');
       if (process.env.DRIFT_GESTURE_FILTER && !name.includes(process.env.DRIFT_GESTURE_FILTER)) continue;
       const viewport = mobile ? {width: 390, height: 844} : {width: 960, height: 600};
-      const context = await browser.newContext({viewport, hasTouch: mobile, deviceScaleFactor: mobile ? report.touchDpr : 1});
+      const context = await browser.newContext({viewport, hasTouch: mobile, deviceScaleFactor: process.env.DRIFT_GESTURE_SCALE ? report.renderScale : mobile ? report.touchDpr : 1});
+      context.setDefaultTimeout(60000);
       await context.addInitScript(rafDelay => {
         const raf = requestAnimationFrame;
         window.requestAnimationFrame = callback => raf(time => setTimeout(() => callback(time), rafDelay));
-      }, mobile ? 500 : 100);
+      }, 500);
       const page = await context.newPage(); activePage = page;
       const errors = [];
       page.on('console', message => { if (message.type() === 'warning' || message.type() === 'error') errors.push(message.text()); });
@@ -80,6 +82,8 @@ try {
       await page.evaluate(() => Module._OceanSetPaused(1));
       await delay(150);
       await page.screenshot({path: resolve(output, name + '-ocean.png')});
+      await page.evaluate(() => { Module._OceanSetWaveIntensity(0); Module._OceanSetPaused(0); });
+      await delay(700);
       await reset();
       const start = screen(-14, -22), end = screen(-4, -22);
       await pointer(0, start);

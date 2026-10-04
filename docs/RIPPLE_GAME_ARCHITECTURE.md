@@ -1,5 +1,9 @@
 # Drift ripple game architecture
 
+> Historical design/validation record. The current shallow-water solver, finite
+> splashes, wave interference and full surface rendering supersede the analytic
+> ring force and shading described below. See [Ocean interactions](OCEAN_INTERACTIONS.md).
+
 The [physics and fluid implementation](PHYSICS_FLUID_SIMULATION.md) adds checked
 SDK kernels and validated current/drag tuning to this baseline.
 

@@ -1,5 +1,8 @@
 # Drift: danger and arrival
 
+> Historical course validation. Reset now seeds ambient waves and boat motion
+> comes from the fluid velocity. See [Ocean interactions](OCEAN_INTERACTIONS.md).
+
 Implemented October 3, 2026. One authored rescue course now provides the complete
 M2 loop: guide the broken boat around a rock, arrive slowly inside the green
 dock, or crash and Retry. Three-level progression remains M3.

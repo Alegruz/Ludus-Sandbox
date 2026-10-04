@@ -1,5 +1,9 @@
 # Drift first playable slice
 
+> Historical design/validation record. The current shallow-water solver, finite
+> splashes, wave interference and full surface rendering supersede the analytic
+> ring force and shading described below. See [Ocean interactions](OCEAN_INTERACTIONS.md).
+
 The next slice now implements the complete rock/dock/crash/retry loop. See
 [M2 implementation and validation](RIPPLE_GAME_M2.md) for current behavior; the
 M0/M1 record below describes the original open-water baseline.

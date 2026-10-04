@@ -6,11 +6,11 @@
 // "CPU layouts are application contracts"). The layout MUST match the std140
 // layout Slang assigns to the `OceanUniforms` constant buffer in
 // shaders/ocean.slang. The offsets below were taken from the Slang reflection
-// JSON (set/group 0, binding 0, total size 3840) and are asserted so a mismatch
+// JSON (set/group 0, binding 0, total size 16128) and are asserted so a mismatch
 // is a compile error, not a silent visual bug.
 //
-// The block is set/group 0, binding 0, visible to both stages, 3840 bytes
-// (within the engine's 16..4096 byte, multiple-of-16 bound).
+// The block is set/group 0, binding 0, visible to both stages, 16128 bytes
+// (within the engine's 16..16384 byte, multiple-of-16 bound).
 
 #include "game/ripple_game.h"
 #include "ocean/numeric.h"
@@ -66,7 +66,10 @@ struct alignas(16) OceanUniforms final
     // Two exactly represented 24-bit integers per cell. First: velocity.xy,
     // height. Second: foam, advected material displacement.xy. Each channel is
     // eight bits; float32 carries all 24 bits exactly on every shader backend.
-    float32 Flow[192][4]; // 16 x 24 samples, two cells per vec4
+    float32 Flow[192][4]; // 16 x 24 transport samples, two cells per vec4
+    // Full 48 x 64 simulated surface. A float stores one exact 24-bit integer:
+    // low 16 bits height (signed zero 32768), high 8 bits transported foam.
+    float32 Surface[768][4]; // offset 3840, four cells per vec4
 };
 
 static_assert(std::is_standard_layout_v<OceanUniforms>);
@@ -94,9 +97,10 @@ static_assert(offsetof(OceanUniforms, Rocks) == 480);
 static_assert(offsetof(OceanUniforms, BoatMotion) == 736);
 static_assert(offsetof(OceanUniforms, FlowInfo) == 752);
 static_assert(offsetof(OceanUniforms, Flow) == 768);
-static_assert(sizeof(OceanUniforms) == 3840 && alignof(OceanUniforms) == 16);
-// Within the engine's uniform bounds (16..4096, multiple of 16).
-static_assert(sizeof(OceanUniforms) % 16 == 0 && sizeof(OceanUniforms) >= 16 && sizeof(OceanUniforms) <= 4096);
+static_assert(sizeof(OceanUniforms) == 16128 && alignof(OceanUniforms) == 16);
+static_assert(offsetof(OceanUniforms, Surface) == 3840);
+// Within the engine's uniform bounds (16..16384, multiple of 16).
+static_assert(sizeof(OceanUniforms) % 16 == 0 && sizeof(OceanUniforms) >= 16 && sizeof(OceanUniforms) <= 16384);
 
 // Fill a uniform block from sanitized settings + clock + actual framebuffer
 // extent. `widthPx`/`heightPx` are the ACTUAL acquired frame pixels
