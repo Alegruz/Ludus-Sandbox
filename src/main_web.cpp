@@ -107,15 +107,17 @@ EM_JS(void, PresentGame, (float64 x, float64 y, uint32 placements, uint32 contac
                                paused: String(!!paused), enabled: String(!!enabled), vx, vy, docking, crash,
                                phase: ['playing', 'crashed', 'arrived'][phase], course, courseCount, complete: String(!!complete)});
     const heading = document.getElementById('course-title');
-    const headingText = 'Course ' + course + ' / ' + courseCount + ' \u2014 ' + UTF8ToString(title);
+    const headingText = enabled ? 'Course ' + course + ' / ' + courseCount + ' \u2014 ' + UTF8ToString(title) : 'Ocean playground';
     if (heading.textContent !== headingText) heading.textContent = headingText;
+    heading.title = headingText;
     const instructions = document.getElementById('game-instructions');
-    const instructionText = UTF8ToString(instruction) + ' Drag to build a current; stir to turn it. Tap for splashes.';
+    const instructionText = (enabled ? UTF8ToString(instruction) + ' ' : "") +
+                            'Drag to build a current; stir to turn it. Tap for splashes.';
     if (instructions.textContent !== instructionText) instructions.textContent = instructionText;
     const feedback = ['Tap for ripples. Drag to move the water. Stir to turn it.', 'Ripple queued.', 'Ripple sent.',
                       'Ripple recharging...', 'Too many ripples. Wait a moment.',
                       'Tap clear water, away from rocks.', 'Resume to place a ripple.'];
-    const message = !enabled ? 'Ocean tuning mode.' : phase === 1 ?
+    const message = !enabled ? (paused ? 'Paused.' : 'Ocean tuning mode.') : phase === 1 ?
                     (crash === 1 ? 'Crashed into a rock. Retry to rescue the boat.' : 'Reached the water boundary. Retry to rescue the boat.') :
                     phase === 2 ? (complete ? 'All three courses complete! Play again to start a new run.' :
                     'Boat rescued! Continue to the next level.') : paused ? 'Paused.' :
@@ -127,15 +129,17 @@ EM_JS(void, PresentGame, (float64 x, float64 y, uint32 placements, uint32 contac
     button.textContent = paused ? 'Resume' : 'Pause';
     button.disabled = enabled && phase !== 0;
     button.setAttribute('aria-pressed', String(!!paused));
-    document.getElementById('mode').setAttribute('aria-pressed', String(!!enabled));
+    const mode = document.getElementById('mode');
+    mode.textContent = enabled ? 'Ocean' : 'Boat';
+    mode.setAttribute('aria-label', enabled ? 'Switch to ocean tuning' : 'Return to boat game');
     const next = document.getElementById('game-next');
     next.hidden = !enabled || phase !== 2;
     next.disabled = !enabled || phase !== 2;
     next.textContent = complete ? 'Play again' : 'Next level';
     const playing = document.getElementById('status').dataset.state === 'playing';
     document.getElementById('panel').hidden = !!enabled || !playing;
-    heading.hidden = !enabled || !playing;
-    instructions.hidden = !enabled || !playing;
+    heading.hidden = !playing;
+    instructions.hidden = !playing;
 });
 // clang-format on
 
