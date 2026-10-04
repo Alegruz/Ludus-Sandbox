@@ -58,7 +58,18 @@ all three authored routes, Retry and campaign progression; ASan/UBSan with leak
 detection also passes. Pinned Clang 18 formatting and native/web static analysis
 pass, as do 25 bootstrap/setup regressions and actual preset/SDK discovery.
 
-Browser coverage includes full WebGPU mouse progression, both-backend mouse and
-emulated-touch drag/swirl checks, mobile HUD layouts, and finite-wave overlap.
-Full campaign/recovery checks continue in CI. These use software rendering and
-are separate from physical-device or fresh-player acceptance.
+Browser coverage includes all three rescues and Replay with mouse and emulated
+touch on both WebGPU and WebGL 2, drag/swirl checks, mobile HUD layouts, and
+finite-wave overlap. The renderer suite passes all 13 pixel, fallback, resize,
+network-failure and graphics-recovery checks. Its screenshot helper briefly
+holds test RAF callbacks during compositor readback to prevent continuous
+SwiftShader draws from starving capture; it retains the pixel assertions and
+resumes the production callback afterward.
+
+The final renderer, HUD and wave checks used Release ZIP SHA-256
+`8612ed51550b976e0aabf44e2dace5fb0621c7c335994516b30a14f49594a181`.
+The complete campaign checks used the preceding river candidate, before the
+fix that synchronizes selected wind settings immediately on graphics reset.
+CI rebuilds and reruns the full browser suite on the published tree. These
+checks use software rendering and are separate from physical-device or
+fresh-player acceptance.
