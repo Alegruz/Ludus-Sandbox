@@ -51,7 +51,7 @@ void TestPushAndDrag() noexcept
     CHECK(game.Place({-5, 0}) == PlacementResult::Queued);
     for (int i = 0; i < 60; ++i)
         game.Tick();
-    CHECK(game.GetBoat().Position.X > 0.5);
+    CHECK(game.GetBoat().Position.X > 0.2);
     CHECK(Near(game.GetBoat().Position.Y, 0));
     CHECK(game.Contacts() == 1);
     const float64 velocity = game.GetBoat().Velocity.X;
@@ -60,8 +60,9 @@ void TestPushAndDrag() noexcept
     CHECK(game.Contacts() == 1);
     CHECK(game.GetBoat().Velocity.X < velocity);
     CHECK(game.ActiveRipples() == 0);
+    CHECK(game.GetBoat().Velocity.X < 0); // The passing trough reverses the local flow.
 
-    // A ring placed ahead opposes existing motion; a ring beside it turns.
+    // A finite pressure packet rocks the hull; its return flow can reverse motion.
     const float64 forwardVelocity = game.GetBoat().Velocity.X;
     (void)game.Place({game.GetBoat().Position.X + 5, 0});
     for (int i = 0; i < 30; ++i)
@@ -78,12 +79,12 @@ void TestPushAndDrag() noexcept
     (void)game.Place({5, 0});
     for (int i = 0; i < 60; ++i)
         game.Tick();
-    CHECK(game.GetBoat().Position.X < -0.5);
+    CHECK(game.GetBoat().Position.X < -0.2);
     game.Reset();
     (void)game.Place({0, -5});
     for (int i = 0; i < 60; ++i)
         game.Tick();
-    CHECK(game.GetBoat().Position.Y > 0.5);
+    CHECK(game.GetBoat().Position.Y > 0.2);
     game.Reset();
     (void)game.Place({0, 0});
     for (int i = 0; i < 100; ++i)
@@ -197,7 +198,7 @@ void TestPhysicalCurrentAndTuning() noexcept
     {
         game.Tick();
     }
-    CHECK(game.GetBoat().Position.X > 0.5); // Small drag must not erase motion.
+    CHECK(std::abs(game.GetBoat().Position.X) < 1e-12); // Negligible drag exchanges negligible water momentum.
     settings.PushSpeed = 0.0;
     settings.DragRate = 0.7;
     CHECK(game.SetPhysics(settings));
@@ -271,7 +272,7 @@ void TestSurfaceGestures() noexcept
     }
     CHECK(game.EndStroke({-5, 0}) == PlacementResult::Queued);
     game.Tick();
-    CHECK(game.Placements() == 1 && Near(game.GetWater().Diagnostics().Energy, 0));
+    CHECK(game.Placements() == 1 && game.GetWater().Diagnostics().Energy > 0);
     game.Reset();
     (void)game.BeginStroke({-5, 0});
     game.CancelInput();
@@ -377,7 +378,7 @@ void TestSurfaceGestures() noexcept
     // Packing stays exactly representable and samples the solver, including zero.
     game.Reset();
     const auto calm = BuildUniforms(ludus::sandbox::ocean::DefaultSettings(), {}, 960, 540, game, true);
-    CHECK(sizeof(calm) == 3840 && calm.FlowInfo[0] == 16 && calm.FlowInfo[1] == 24 && calm.FlowInfo[2] == 0);
+    CHECK(sizeof(calm) == 16128 && calm.FlowInfo[0] == 16 && calm.FlowInfo[1] == 24 && calm.FlowInfo[2] == 0);
     CHECK(calm.Flow[0][0] == 8421504.0F); // three signed zero channels (128).
     Circle(game, {-6, 0}, 1.0);
     const auto snapshot = BuildUniforms(ludus::sandbox::ocean::DefaultSettings(), {}, 960, 540, game, true);
@@ -393,6 +394,73 @@ void TestSurfaceGestures() noexcept
         }
     }
     CHECK(changed);
+}
+void TestPhysicalWaves() noexcept
+{
+    WaterField left, right, together, opposed;
+    CHECK(left.Reset({}) && right.Reset({}) && together.Reset({}) && opposed.Reset({}));
+    CHECK(left.Splash({-8, 0}, 0.01));
+    CHECK(right.Splash({8, 0}, 0.01));
+    CHECK(together.Splash({-8, 0}, 0.01) && together.Splash({8, 0}, 0.01));
+    CHECK(opposed.Splash({-8, 0}, 0.01) && opposed.Splash({8, 0}, -0.01));
+    CHECK(Near(left.Diagnostics().Energy, 0)); // No instantaneous impulse.
+    for (usize i = 0; i < 100; ++i)
+    {
+        left.Advance(kTickSeconds);
+        right.Advance(kTickSeconds);
+        together.Advance(kTickSeconds);
+        opposed.Advance(kTickSeconds);
+    }
+    float64 error = 0.0, signal = 0.0, mass = 0.0;
+    for (usize y = 0; y < kWaterHeight; ++y)
+    {
+        for (usize x = 0; x < kWaterWidth; ++x)
+        {
+            const float64 a = left.SurfaceCell(x, y).Height + right.SurfaceCell(x, y).Height;
+            const float64 b = together.SurfaceCell(x, y).Height;
+            error += (a - b) * (a - b);
+            signal += a * a;
+            mass += b;
+        }
+    }
+    CHECK(signal > 1e-5 && error < signal * 0.01); // Small waves superpose, including spatial interference.
+    CHECK(std::abs(mass) < 1e-8);                  // Pressure adds energy, not water volume.
+    const float64 constructive = together.Sample({0, 0}).Height;
+    CHECK(std::abs(constructive) > 1e-4);
+    CHECK(std::abs(opposed.Sample({0, 0}).Height) < std::abs(constructive) * 0.05);
+    CHECK(left.Diagnostics().MaxHeight > 0.001); // Packet persists after forcing ends.
+    CHECK(!left.Splash({31, 0}, 1.0));
+    CHECK(!left.Splash({0, 0}, std::numeric_limits<float64>::infinity()));
+
+    WaterField sea;
+    CHECK(sea.SetSeaState(0.7));
+    CHECK(sea.Reset({}));
+    const auto first = sea.Diagnostics();
+    CHECK(first.Energy > 10.0 && first.MaxHeight > 0.1);
+    CHECK(std::abs(sea.Sample({15, 20}).Height) > 0.005);
+    CHECK(std::abs(sea.Sample({-15, -20}).Height) > 0.005);
+    for (usize i = 0; i < 900; ++i)
+        sea.Advance(kTickSeconds);
+    CHECK(sea.Diagnostics().Energy > 1.0 && sea.Diagnostics().Energy < first.Energy * 5.0);
+    CHECK(!Near(sea.Sample({15, 20}).Height, 0));
+    CHECK(!sea.SetSeaState(-1) && Near(sea.SeaState(), 0.7));
+    CHECK(!sea.SetSeaState(std::numeric_limits<float64>::quiet_NaN()));
+    CHECK(sea.SetSeaState(0));
+    CHECK(sea.Active() && sea.Diagnostics().Energy > 0); // Existing waves survive wind changes.
+
+    RippleGame game;
+    CHECK(game.SetSeaState(0.7));
+    game.Reset();
+    const auto boat = game.GetBoat().Position;
+    const float64 before = game.GetWater().Sample({15, 20}).Height;
+    for (usize i = 0; i < 60; ++i)
+        game.Advance(kTickSeconds, true, false);
+    CHECK(Near(game.GetBoat().Position.X, boat.X) && Near(game.GetBoat().Position.Y, boat.Y));
+    CHECK(!Near(game.GetWater().Sample({15, 20}).Height, before)); // Ocean mode keeps simulating.
+    const auto snapshot = BuildUniforms(ludus::sandbox::ocean::DefaultSettings(), {}, 960, 540, game, true);
+    const auto cell = game.GetWater().SurfaceCell(47, 63);
+    const auto packed = static_cast<uint32>(snapshot.Surface[767][3]);
+    CHECK(std::abs((static_cast<float64>(packed % 65536U) - 32768.0) / 32767.0 * 6.0 - cell.Height) < 0.0001);
 }
 void TestSurfaceLevelRules() noexcept
 {
@@ -453,7 +521,10 @@ void TestSurfaceLevelRules() noexcept
     }
     const auto diagnostics = water.Diagnostics();
     CHECK(std::isfinite(diagnostics.Energy) && std::isfinite(diagnostics.MaxCurl));
-    CHECK(diagnostics.MaxHeight <= 3.0);
+    // Depth remains positive even under extreme repeated forcing in a small basin.
+    for (usize y = 0; y < kWaterHeight; ++y)
+        for (usize x = 0; x < kWaterWidth; ++x)
+            CHECK(water.SurfaceCell(x, y).Height > -4.0);
     water.Advance(std::numeric_limits<float64>::quiet_NaN());
     CHECK(Near(water.Diagnostics().Energy, diagnostics.Energy));
 }
@@ -815,6 +886,7 @@ int main()
     TestPhysicalCurrentAndTuning();
     TestSurfaceGestures();
     TestSurfaceLevelRules();
+    TestPhysicalWaves();
     TestLevelValidation();
     TestRockOrigins();
     TestSweptHazardsAndRetry();

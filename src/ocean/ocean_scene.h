@@ -48,6 +48,7 @@ public:
     // between UI/config and the GPU-free settings. The scene never mutates it.
     explicit OceanScene(const ocean::SettingsStore& store) noexcept : mStore(&store)
     {
+        (void)mGame.SetSeaState(store.Get().WaveIntensity);
         (void)mGame.StartCampaign();
     }
 

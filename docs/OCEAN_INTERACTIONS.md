@@ -1,92 +1,87 @@
-# Ocean flow field
+# Simulated ocean surface
 
-Dragging adds momentum to a shared velocity field. Surface height responds to
-its divergence, and the height gradient accelerates the water back. A curved
-stroke deposits tangential momentum along its actual path, so circulation
-emerges without classifying a circle, fitting a center or spawning a vortex.
-Strokes combine with the water already there; opposite strokes can cancel it.
-Boat drag samples this same field.
+The ocean and boat share a 48 × 64 staggered velocity/free-surface grid. Swiping
+adds directional momentum along the actual pointer path; circular motion adds
+circulation without recognizing a shape. Tapping applies pressure over a finite
+6 m footprint and 0.28-second sine-squared envelope. It does not create an
+instant point displacement or an independent ring impulse on the boat.
 
-![A released swipe drives a surface wave](screenshots/ocean-flow-wave.png)
-![Stirring advects the water pattern and carries the boat](screenshots/ocean-flow-swirl.png)
+Waves propagate, overlap, interfere and reflect from closed boundaries and
+rasterized rocks. The default sea begins with eight standing gravity modes,
+with frequencies derived from gravity, 4 m water depth and basin dimensions.
+Continuous wind pressure sustains motion in the same solver. Existing waves
+survive changes to sea strength; Retry seeds the selected sea state again.
+`WaveIntensity` controls that strength. Wave scale/speed and bulk-current tuning
+still control the small sub-grid shading detail; they do not retime the solver.
 
-## Simulation
+![Ambient wind-driven surface](screenshots/ocean-waves-ambient.png)
+![Two finite splashes propagating and overlapping](screenshots/ocean-waves-overlap.png)
 
-`WaterField` owns a 48 × 64 staggered grid: horizontal/vertical velocities on
-cell faces and height, foam and material displacement at cell centers. It uses
-one roughly 300 KB allocation, reports allocation failure through `Ready()` and
-rejects forcing when unavailable. There are no allocations during gestures,
-stepping, sampling or reset. Copying is disabled; course transitions reuse the
-field storage, avoiding large temporaries on the 64 KB browser stack.
+## Physics
 
-Each segment integrates a compact 4 m momentum brush with at most 0.4 m spacing
-and distance-weighted force. The force does not depend on the number of pointer
-events. Sampling only faces in the brush support bounds the work. The existing
-0.4 m jitter filter and 2.5 m tap threshold remain. There is no effect pool,
-shape recognition, authored spiral or per-stroke expiration timer.
+At fixed 60 Hz, CFL-limited substeps solve the depth-averaged equations:
 
-At 60 Hz, substeps perform:
+```
+D u / Dt = -g gradient(eta) - gradient(p) - damping * u
+partial eta / partial t = -divergence((H + eta) * u)
+```
 
-1. Semi-Lagrangian self-advection of face velocities with midpoint backtracing.
-2. Gravity acceleration `du/dt = -g gradient(h)` and velocity damping.
-3. Height update `dh/dt = -H divergence(u)` using paired face fluxes.
-4. Transport of material displacement and foam, with foam production from
-   compression and gradual dissipation.
+`g = 9.8 m/s²`, `H = 4 m`. Velocities use midpoint semi-Lagrangian advection.
+Continuity uses shared upwind total-depth face fluxes, so neighboring cells
+exchange the same volume. Height is neither clipped nor artificially damped.
+A conservative timestep includes the 10 m/s component velocity bound and
+`sqrt(g * maximumDepth)`; tests exercise positive depth in small basins.
+Velocity damping and numerical diffusion dissipate energy. Rock and perimeter
+faces close normal flow. Material displacement and foam advect with velocity;
+compression and steep surface slopes generate foam, which gradually decays.
 
-`g = 9.8`, `H = 2`, and the substep bound uses wave speed `sqrt(g H)`, a 10 m/s
-component speed cap and minimum cell spacing. This is a game-oriented,
-linearized free-surface model with advected momentum, rather than full nonlinear
-shallow-water or deep-ocean simulation. Height is bounded to ±3 m for extreme
-forcing, so clipping can change integrated height in those extreme cases.
-Ordinary unsaturated closed-domain waves conserve integrated height. The
-material map relaxes slowly and is bounded to ±12 m. Semi-Lagrangian numerical
-diffusion and damping dissipate circulation without a hard expiry.
+The formulation follows [Bridson's shallow-water lecture](https://www.cs.ubc.ca/~rbridson/courses/533d-fall-2005/nov17-cs533d-slides.pdf).
+This is a depth-averaged shallow-water surface model with nonlinear continuity
+and advected momentum. It does not resolve deep-water dispersion, overturning
+breakers, air or airborne spray. Foam is a transported visual tracer, not a
+separate multiphase fluid.
 
-The formulation follows the height/divergence and pressure coupling described
-in [Robert Bridson's shallow-water lecture](https://www.cs.ubc.ca/~rbridson/courses/533d-fall-2005/nov17-cs533d-slides.pdf).
-Grid self-advection and material transport use the Eulerian approach discussed
-in [GPU Gems chapter 38](https://developer.nvidia.com/gpugems/gpugems/part-vi-beyond-triangles/chapter-38-fast-fluid-dynamics-simulation-gpu).
-Unlike an incompressible projection, the free-surface update keeps divergence
-available to generate waves.
+One bounded allocation holds the grid, scratch buffers, precomputed wind bases
+and sixteen finite splash sources. Reset/stepping/input reuse it; no hot-path
+allocations occur. Allocation failure is explicit through `Ready()`. Pointer
+forcing integrates a compact 4 m brush with at most 0.4 m spacing, independent
+of event density. Cancellation stops new forcing while existing waves evolve.
+Pause, blur and terminal states freeze the simulation. Graphics restart keeps
+its state. Ocean tuning mode advances the fluid while holding the boat still.
 
-Rock cells and the rectangular water boundary close normal velocity faces.
-Height waves reflect from them; backtracing rejects solid-crossing samples.
-Input rejects rock crossings even when a fast stroke has only down/up events.
-Rock geometry is rasterized at simulation resolution. Pause and terminal states
-freeze the field. The terminal tick advances it only to the boat's collision
-time. Cancel stops further forcing while existing water keeps moving; reset
-clears the field, and graphics restart preserves it.
+Boat drag samples the actual velocity, so a splash rocks the hull forward and
+back as crests and troughs pass. Dragging builds a sustained steering current.
+Legacy `Ripples` and front-contact counters remain for diagnostic compatibility;
+they have no force or shader ring effect. Only crash feedback flashes the hull.
 
-The three-course rescue game and its tap ripple steering remain intact. Taps
-retain their existing analytic radial impulse and rendering. Ambient wind
-swells and boat wakes also remain cosmetic. The new field replaces the scripted
-swipe-wave and vortex effects specifically.
+## Surface visualization
 
-## Rendering contract
+The renderer uploads every height/foam cell, rather than reducing the surface
+to 16 × 24. A nine-tap positive quadratic B-spline reconstructs continuous height
+and analytic surface gradients. Those gradients supply the normal used for
+Fresnel sky reflection, sun/skylight highlights and diffuse water lighting;
+depth controls absorption and height controls subtle crest coloration. This
+makes the evolving wave geometry visible. Foam comes from the transported
+solver state. Three weak gravity ripples add sub-grid normal detail, advected
+by the material map. There are no scripted splash rings or V-shaped boat wakes.
+Height-gradient normal construction follows the approach discussed in
+[GPU Gems chapter 1](https://developer.nvidia.com/gpugems/gpugems/part-i-natural-effects/chapter-1-effective-water-simulation-physical-models).
 
-The installed renderer has no public texture/compute API. The application
-samples the field into a 16 × 24 grid in its uniform block, leaving engine APIs
-and the pinned SDK unchanged. Each sample contains velocity.xy, height, foam
-and material displacement.xy. Two floats store six eight-bit channels as
-exactly representable 24-bit integers. Zero signed channels use byte 128;
-velocity, height and displacement ranges are ±10, ±3 and ±12 respectively.
-The shader decodes before bilinear interpolation. An undisturbed field uses a
-zero velocity range as an idle marker, skipping all grid lookups per pixel.
+The installed fullscreen RHI has no texture/compute API. The immutable uniform
+snapshot therefore packs each full surface cell into one exact 24-bit integer
+stored as `float32`: signed 16-bit height (zero 32768, range ±6 m) plus eight-bit
+foam. Rendering clips heights beyond this range; simulation retains them.
+A separate 16 × 24 transport snapshot carries velocity and material displacement
+with eight-bit channels. Decode happens before interpolation.
 
-The 3840-byte std140 block keeps the existing fields through offset 735. Boat
-motion starts at 736, field metadata at 752 and 192 vec4 samples at 768. C++
-assertions, SPIR-V/WGSL/GLSL ES reflection and the packager enforce that layout.
-Quantization and the coarser render grid smooth fine details; the boat samples
-the full simulation grid. Normals and coloration use sampled height. The
-water pattern and foam breakup use the advected material map; foam comes from
-the transported solver state, with contrast remapped for visibility. There is
-no gesture-shaped rendering overlay for swipes or swirls.
+The std140 block is 16128 bytes. Existing fields occupy bytes 0–735, boat motion
+begins at 736, flow metadata at 752, coarse transport at 768, and full surface at
+3840. C++ assertions, SPIR-V/WGSL/GLSL ES reflection and packaging enforce it.
+The linked [engine PR](https://github.com/Alegruz/Ludus/pull/67) increases the
+bounded uniform ceiling to the portable 16 KiB limit. The SDK revision is pinned
+in `config/ludus-version.txt`; machine paths stay in ignored local presets.
 
-## Validation
-
-Use the selectable presets generated by setup and SDK revision
-`9554d051b2125580327d9f89c06395798a53028d` from `config/ludus-version.txt`.
-Machine paths remain in ignored local presets.
+## Verification
 
 ```bash
 cmake --build --preset linux-clang-development
@@ -95,22 +90,20 @@ cmake --build --preset web-emscripten-release
 ./scripts/package-web
 python3 -m zipfile -e out/packages/drift-ocean-web-release.zip out/browser-qa/extracted
 node tools/browser-tests/run.mjs out/browser-qa/extracted out/packages/drift-ocean-web-release.zip out/browser-qa/renderers
-node tools/browser-tests/ripple.mjs out/browser-qa/extracted out/browser-qa/courses
 node tools/browser-tests/gestures.mjs out/browser-qa/extracted out/browser-qa/gestures
+node tools/browser-tests/waves.mjs out/browser-qa/extracted out/browser-qa/waves
+node tools/browser-tests/ripple.mjs out/browser-qa/extracted out/browser-qa/courses
 ```
 
-The logic tests cover circulation sign and persistence, divergence creating
-height, propagation beyond the brush, material advection, boat transport,
-cancellation of opposite strokes, dense/sparse event equivalence, integrated
-height conservation, solid boundaries, small-domain stability, invalid input,
-terminal clipping and campaign reset. Browser checks use actual mouse/emulated
-touch strokes, read-only field diagnostics, signed circulation and material
-transport after release, screenshots, exact pause freezing and graphics restart.
-The DOM exposes field energy, peak curl/divergence and height as QA data, without
-adding technical controls to gameplay.
-
-Local results and the exact tested package hash are in
-[OCEAN_FLOW_VALIDATION.json](OCEAN_FLOW_VALIDATION.json). Browser tests use pinned
-Chromium 140.0.7339.186 with SwiftShader and test-only RAF delays. They establish
-software-rendered behavior, not physical mobile input, hardware frame timing or
-hosted itch.io publication.
+Logic tests exercise finite forcing, wave persistence, constructive/destructive
+interference and small-amplitude superposition, volume conservation, wind state,
+solid boundaries, positive depth, clockwise/counterclockwise circulation,
+material advection, boat response, input cancellation and campaign transitions.
+Browser tests use actual mouse/emulated touch strokes, rendered screenshots,
+exact pause freezing and graphics restart, plus the rescue campaign steered by
+currents. Read-only diagnostics expose energy, height, curl and divergence.
+Results and exact package identity are recorded in `OCEAN_WAVES_VALIDATION.json`.
+The software-GPU campaign/gesture CI uses half render resolution while
+retaining full simulation and pointer coordinates. Renderer and splash snapshots
+run at full test resolution. SwiftShader verifies software rendering; physical mobile performance and the
+hosted itch.io build remain separate acceptance work.

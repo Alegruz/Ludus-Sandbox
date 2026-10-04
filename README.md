@@ -3,10 +3,11 @@
 External sandbox application for developing and validating the Ludus engine SDK.
 
 This checkout contains **Drift**, a top-down 2D water playground with a three-course
-boat rescue game. Tap for an expanding ripple, drag to add momentum to the water,
-or stir to build circulation. The evolving flow field transports the
-disabled boat in the direction of the gesture; ripples push it away on contact.
-Learn to push and brake in open water, steer around a rock, then weave through
+boat rescue game. Tap for a finite splash and spreading gravity waves, drag to add momentum,
+or stir to build circulation. A nonlinear shallow-water solver evolves wind
+swells, interference, reflected waves and transported foam. Boat drag samples
+the same velocity field; a passing wave can rock it in both directions.
+Drag to steer in open water, around a rock, then weave through
 a staggered channel. Arrive slowly in each green dock to unlock Next level.
 Pause, Retry the current course, or switch to ocean tuning. Play again starts a
 new run after the third rescue.
@@ -15,7 +16,7 @@ Rendering uses one procedural fullscreen pass authored in Slang, compiled to
 SPIR-V for native Vulkan, WGSL for WebGPU, and generated GLSL ES for WebGL 2.
 Game rules and state live in this repository and consume the installed Ludus SDK.
 
-![Swirling water guides the boat in the rescue course](docs/screenshots/ocean-flow-swirl.png)
+![Finite splashes propagate and overlap on the simulated surface](docs/screenshots/ocean-waves-overlap.png)
 
 The browser build is the playable target. Native compilation is verified, but
 native pointer controls have not been connected. All three courses, docking,

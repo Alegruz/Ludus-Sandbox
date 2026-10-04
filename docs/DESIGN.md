@@ -2,12 +2,11 @@
 
 ## Goals
 
-A runnable, top-down **stylized** 2D ocean for the "Drift" theme: an
-orthographic, directly-overhead sea filling the viewport, with a restrained
-palette, broad slowly-advecting color patches, two overlapping wave patterns
-moving in different directions, and sparse broken foam streaks. It is a clear 2D
-illustration — no perspective horizon, no photorealistic reflections, no dense
-sparkle — with enough contrast to later place boats and debris.
+A top-down ocean playground with an evolving shallow-water surface. Wind seeds
+multiple gravity modes; splashes and pointer momentum feed the same solver.
+Surface gradients drive lighting and reflection, and transported foam makes
+compression visible. See [Ocean interactions](OCEAN_INTERACTIONS.md) for the
+current physics and rendering contract.
 
 ## Architecture: scene/tuning state lives outside GPU code
 
@@ -104,20 +103,16 @@ Robustness rules (all in `SceneClock::Advance`, all unit-tested):
 
 `OceanUniforms` (CPU, `src/ocean/ocean_uniforms.h`) mirrors the `OceanUniforms`
 constant buffer in `shaders/ocean.slang`. It is **set/group 0, binding 0**,
-visible to both stages, **1024 bytes** (within the engine's 16..4096, multiple of
-16 bound). The field offsets were taken from the Slang std140 reflection and are
-`static_assert`-checked, so a CPU/GPU layout drift is a compile error. Per the
-engine guidance, CPU layout is the application's contract: we read the per-target
-reflection and assert `offsetof`/`sizeof`/`alignof` rather than assume packing.
+visible to both stages, **16128 bytes** within the engine's 16..16384-byte bound.
+Every offset is asserted in C++ and checked against all generated shader targets.
 
-The original ocean fields occupy bytes 0–143. Boat state begins at 144, game
-state at 160, and sixteen 16-byte ripple records at 176. Slang uses individually
-named `ripple0` through `ripple15` fields to satisfy the engine's current WebGL 2
-reflection subset; the contiguous CPU array has the same offsets and stride.
-Rescue bounds, dock and level state begin at 432, 448 and 464, with rock
-records at 480. Surface metadata begins at 736, eight pairs of vec4 effect
-records at 752, and boat velocity/speed at 1008. These also use named Slang fields and a
-contiguous CPU mirror. See [Ocean interactions](OCEAN_INTERACTIONS.md).
+The original ocean/game fields occupy bytes 0–735. Boat motion starts at 736,
+flow metadata at 752, the 16 × 24 transport snapshot at 768, and the complete
+48 × 64 height/foam surface at 3840. Each surface cell stores signed 16-bit
+height over ±6 m and eight-bit foam in one exact 24-bit float integer. Normals
+come from derivatives of a nine-sample quadratic B-spline reconstruction.
+Legacy ripple fields remain for diagnostic compatibility; they draw no rings
+and apply no boat impulses.
 
 In boat mode, the camera fits a 60 × 80 m placement area with a 5 m margin:
 `viewHeight = max(90, 70 / aspect)` and `viewWidth = viewHeight * aspect`.

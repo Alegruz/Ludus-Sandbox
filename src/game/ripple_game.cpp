@@ -107,7 +107,7 @@ const char* CourseTitle(uint32 index) noexcept
 const char* CourseInstruction(uint32 index) noexcept
 {
     constexpr const char* instructions[kCourseCount] = {
-        "Tap behind the boat to push it toward the green dock. Tap ahead to slow down.",
+        "Carry the boat to the green dock with the current; arrive slowly.",
         "Guide the boat around the rock to the green dock; arrive slowly.",
         "Weave around the staggered rocks, then slow down inside the green dock.",
     };
@@ -517,9 +517,9 @@ uint32 RippleGame::ActiveRipples() const noexcept
     return count;
 }
 
-void RippleGame::Advance(float64 delta, bool running) noexcept
+void RippleGame::Advance(float64 delta, bool running, bool gameplay) noexcept
 {
-    if (!running || mPhase != GamePhase::Playing)
+    if (!running || (gameplay && mPhase != GamePhase::Playing))
     {
         CancelInput();
         return;
@@ -530,13 +530,21 @@ void RippleGame::Advance(float64 delta, bool running) noexcept
     }
     mAccumulator += delta > 0.1 ? 0.1 : delta;
     uint32 steps = 0;
-    while (mAccumulator + kEpsilon >= kTickSeconds && steps < 4 && mPhase == GamePhase::Playing)
+    while (mAccumulator + kEpsilon >= kTickSeconds && steps < 4 && (!gameplay || mPhase == GamePhase::Playing))
     {
-        Tick();
+        if (gameplay)
+        {
+            Tick();
+        }
+        else
+        {
+            mWater.Advance(kTickSeconds);
+            ++mTicks;
+        }
         mAccumulator -= kTickSeconds;
         ++steps;
     }
-    if (mPhase != GamePhase::Playing)
+    if (gameplay && mPhase != GamePhase::Playing)
     {
         CancelInput();
         return;
@@ -584,6 +592,11 @@ void RippleGame::Tick() noexcept
             }
         }
         if (slot == nullptr || mNextId == std::numeric_limits<uint64>::max())
+        {
+            mLastPlacement = PlacementResult::Capacity;
+            continue;
+        }
+        if (!mWater.Splash(mInput[i], mPhysics.PushSpeed))
         {
             mLastPlacement = PlacementResult::Capacity;
             continue;
@@ -701,18 +714,8 @@ void RippleGame::Tick() noexcept
         auto& ripple = mRipples[hit.Index];
         ripple.BoatAffected = true;
         ++mContacts;
-        const Point atHit{mBoat.Position.X + (end.X - mBoat.Position.X) * hit.Time,
-                          mBoat.Position.Y + (end.Y - mBoat.Position.Y) * hit.Time};
-        const Point direction{atHit.X - ripple.Origin.X, atHit.Y - ripple.Origin.Y};
-        const float64 length = Length(direction);
-        if (length > kEpsilon)
-        {
-            const float64 radius = (ripple.PreviousAge + hit.Time * kTickSeconds) * kRippleSpeed;
-            const float64 strength = mPhysics.PushSpeed * (1.0 - radius / (kRippleLifetime * kRippleSpeed));
-            mBoat.Velocity.X += direction.X / length * strength;
-            mBoat.Velocity.Y += direction.Y / length * strength;
-            mBoat.ContactFlash = 0.18;
-        }
+        // Legacy front counters remain diagnostic only. The surface solver
+        // supplies all momentum and visible waves, including their return flow.
     }
     mBoat.Position = {mBoat.Position.X + (end.X - mBoat.Position.X) * travelFraction,
                       mBoat.Position.Y + (end.Y - mBoat.Position.Y) * travelFraction};

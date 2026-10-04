@@ -24,8 +24,9 @@ const server = createServer(async (request, response) => {
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 const base = `http://127.0.0.1:${server.address().port}`;
 const report = {kind: 'Software GPU; mouse and emulated touch', cases: [],
-  rafDelayMs: {mouse: 100, touch: 500},
+  rafDelayMs: {mouse: 500, touch: 500},
   touchDpr: Number(process.env.DRIFT_GESTURE_DPR || 1),
+  renderScale: Number(process.env.DRIFT_GESTURE_SCALE || 1),
   args: ['--enable-unsafe-webgpu', '--enable-features=Vulkan', '--use-webgpu-adapter=swiftshader',
     '--use-angle=swiftshader', '--use-vulkan=swiftshader', '--disable-vulkan-surface', '--enable-unsafe-swiftshader']};
 const state = page => page.locator('#game-status').evaluate(el => ({...el.dataset}));
@@ -38,6 +39,18 @@ async function until(read, predicate, name) {
   }
   throw Error('Timeout: ' + name);
 }
+async function pauseWithRenderedFrames(page) {
+  const before = await page.evaluate(() => {
+    Module._OceanSetPaused(1);
+    return Number(document.getElementById('status').dataset.frames);
+  });
+  await until(() => state(page), s => s.paused === 'true', 'pause telemetry');
+  // Telemetry confirms a submitted frame, not its presentation. In particular,
+  // a 150 ms sleep is shorter than our 500 ms RAF cadence. Render subsequent
+  // frozen frames before comparing screenshots, as in the renderer suite.
+  await until(() => page.locator('#status').getAttribute('data-frames'),
+    n => Number(n) >= before + 3, 'paused frames rendered');
+}
 let browser, activePage;
 try {
   browser = await chromium.launch({headless: true, args: report.args});
@@ -47,11 +60,16 @@ try {
       const name = backend + (mobile ? '-touch' : '-mouse');
       if (process.env.DRIFT_GESTURE_FILTER && !name.includes(process.env.DRIFT_GESTURE_FILTER)) continue;
       const viewport = mobile ? {width: 390, height: 844} : {width: 960, height: 600};
-      const context = await browser.newContext({viewport, hasTouch: mobile, deviceScaleFactor: mobile ? report.touchDpr : 1});
+      // The 3 CSS-pixel focus outline is outside the fitted water bounds. At
+      // fractional DPR its compositor rounding can change by one color level.
+      // Compare the water exactly, without that independently composited rim.
+      const waterClip = {x: 4, y: 4, width: viewport.width - 8, height: viewport.height - 8};
+      const context = await browser.newContext({viewport, hasTouch: mobile, deviceScaleFactor: process.env.DRIFT_GESTURE_SCALE ? report.renderScale : mobile ? report.touchDpr : 1});
+      context.setDefaultTimeout(60000);
       await context.addInitScript(rafDelay => {
         const raf = requestAnimationFrame;
         window.requestAnimationFrame = callback => raf(time => setTimeout(() => callback(time), rafDelay));
-      }, mobile ? 500 : 100);
+      }, 500);
       const page = await context.newPage(); activePage = page;
       const errors = [];
       page.on('console', message => { if (message.type() === 'warning' || message.type() === 'error') errors.push(message.text()); });
@@ -77,9 +95,10 @@ try {
         await page.evaluate(() => { Module._OceanResetSimulation(); Module._OceanSetPaused(0); });
         await until(() => state(page), s => Number(s.energy) === 0 && Number(s.placements) === 0, 'reset');
       };
-      await page.evaluate(() => Module._OceanSetPaused(1));
-      await delay(150);
+      await pauseWithRenderedFrames(page);
       await page.screenshot({path: resolve(output, name + '-ocean.png')});
+      await page.evaluate(() => { Module._OceanSetWaveIntensity(0); Module._OceanSetPaused(0); });
+      await delay(700);
       await reset();
       const start = screen(-14, -22), end = screen(-4, -22);
       await pointer(0, start);
@@ -122,14 +141,16 @@ try {
         await until(() => state(page), s => Number(s.ticks) >= Number(moving.ticks) + 24, 'released field evolves');
         const laterMaterial = await page.evaluate(() => Module._DriftWaterSample(0, -22, 5));
         assert((laterMaterial - firstMaterial) * sign > 0.05, 'Water pattern does not advect after release');
-        await page.evaluate(() => Module._OceanSetPaused(1));
-        await until(() => state(page), s => s.paused === 'true', 'freeze vortex');
-        await delay(150);
+        await pauseWithRenderedFrames(page);
         const frozen = await state(page);
-        const firstPixels = PNG.sync.read(await page.screenshot({path: resolve(output, name + (sign > 0 ? '-ccw.png' : '-cw.png'))}));
-        await delay(200);
+        const firstPixels = PNG.sync.read(await page.screenshot({clip: waterClip,
+          path: resolve(output, name + (sign > 0 ? '-ccw.png' : '-cw.png'))}));
+        const capturedFrame = Number(await page.locator('#status').getAttribute('data-frames'));
+        await until(() => page.locator('#status').getAttribute('data-frames'),
+          n => Number(n) >= capturedFrame + 2, 'subsequent paused frames rendered');
         assert.equal((await state(page)).ticks, frozen.ticks, 'Pause advances current');
-        const laterPixels = PNG.sync.read(await page.screenshot());
+        const laterPixels = PNG.sync.read(await page.screenshot({clip: waterClip, path: resolve(output,
+          name + (sign > 0 ? '-ccw-paused.png' : '-cw-paused.png'))}));
         assert(firstPixels.data.equals(laterPixels.data), 'Paused water pixels keep moving');
         if (sign > 0) {
           await page.evaluate(() => Module._OceanRestart());

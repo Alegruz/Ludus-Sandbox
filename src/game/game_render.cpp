@@ -72,6 +72,18 @@ ocean::OceanUniforms BuildUniforms(const ocean::OceanSettings& settings,
                                               signedByte(water.DisplacementY, 12.0));
         }
     }
+    for (usize y = 0; y < kWaterHeight; ++y)
+    {
+        for (usize x = 0; x < kWaterWidth; ++x)
+        {
+            const auto water = simulation.GetWater().SurfaceCell(x, y);
+            const auto heightCode =
+                static_cast<uint32>(std::clamp(std::round(water.Height / 6.0 * 32767.0 + 32768.0), 1.0, 65535.0));
+            const auto foamCode = static_cast<uint32>(std::round(std::clamp(water.Foam, 0.0, 1.0) * 255.0));
+            const usize cell = y * 48 + x;
+            u.Surface[cell / 4][cell % 4] = static_cast<float32>(heightCode + foamCode * 65536U);
+        }
+    }
     u.LevelBounds[0] = static_cast<float32>(level.HalfExtent.X);
     u.LevelBounds[1] = static_cast<float32>(level.HalfExtent.Y);
     u.DockInfo[0] = static_cast<float32>(level.DockCenter.X);

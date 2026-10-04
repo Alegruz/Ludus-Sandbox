@@ -1,5 +1,9 @@
 # Drift physics and fluid simulation
 
+> Historical design/validation record. The current shallow-water solver, finite
+> splashes, wave interference and full surface rendering supersede the analytic
+> ring force and shading described below. See [Ocean interactions](OCEAN_INTERACTIONS.md).
+
 The game uses a bounded CPU simulation for steering and analytic procedural
 water for appearance. Ludus supplies checked drag coefficients and swept radial
 contact through `Ludus::FoundationMath`. Sandbox owns gameplay state, current,

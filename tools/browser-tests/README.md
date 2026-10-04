@@ -38,7 +38,7 @@ default. To use an explicit artifact directory:
 npm run test:game -- ../../out/browser-qa/extracted ../../out/browser-qa/ripple-results
 ```
 
-This harness uses a test-only 50 ms RAF delay to
+This harness uses a test-only 250 ms RAF delay to
 bound software-rendering work. Touch is
 emulated, not a physical mobile acceptance result.
 The test waits for reset/mode telemetry instead of assuming a 150 ms update.
@@ -56,3 +56,9 @@ and clockwise/counterclockwise swirls. `DRIFT_GESTURE_FILTER` optionally selects
 one case by name, such as `webgl2-touch`.
 `DRIFT_GESTURE_DPR=2` enables higher-resolution emulated touch captures; the
 report records the tested DPR (default 1, matching the rescue-course harness).
+The gesture harness uses a test-only 500 ms RAF delay. Paused captures wait for
+three frozen frames to render before the first capture, then two new frames
+before the second. The exact comparison excludes the outer four CSS pixels,
+which contain the independently composited focus outline; the fitted water is
+fully inside this region. Both comparison screenshots are saved.
+`DRIFT_GESTURE_SCALE=0.5` selects the CI framebuffer scale.
