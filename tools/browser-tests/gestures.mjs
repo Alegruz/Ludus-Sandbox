@@ -7,8 +7,10 @@ import {resolve, sep} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
 import {chromium} from 'playwright';
 import {canvasView} from './view.mjs';
+import {selectBrowserCases} from './cases.mjs';
 import {PNG} from 'pngjs';
 
+const selectedCases = selectBrowserCases(process.env.DRIFT_GESTURE_FILTER);
 const root = resolve(process.argv[2] || '../../out/browser-qa/extracted');
 const output = resolve(process.argv[3] || '../../out/ocean-feedback/browser');
 await mkdir(output, {recursive: true});
@@ -59,7 +61,7 @@ try {
   for (const backend of ['webgpu', 'webgl2']) {
     for (const mobile of [false, true]) {
       const name = backend + (mobile ? '-touch' : '-mouse');
-      if (process.env.DRIFT_GESTURE_FILTER && !name.includes(process.env.DRIFT_GESTURE_FILTER)) continue;
+      if (!selectedCases.includes(name)) continue;
       const viewport = mobile ? {width: 390, height: 844} : {width: 960, height: 600};
       const context = await browser.newContext({viewport, hasTouch: mobile, deviceScaleFactor: process.env.DRIFT_GESTURE_SCALE ? report.renderScale : mobile ? report.touchDpr : 1});
       context.setDefaultTimeout(60000);
@@ -182,6 +184,7 @@ try {
       await context.close(); activePage = undefined;
     }
   }
+  assert.deepEqual(report.cases.map(result => result.name), selectedCases, 'Browser shard missed cases');
 } catch (error) {
   report.failure = String(error); process.exitCode = 1;
   if (activePage) {

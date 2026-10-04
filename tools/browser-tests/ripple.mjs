@@ -7,8 +7,10 @@ import {resolve, sep} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
 import {chromium} from 'playwright';
 import {canvasView} from './view.mjs';
+import {selectBrowserCases} from './cases.mjs';
 import {PNG} from 'pngjs';
 
+const selectedCases = selectBrowserCases(process.env.DRIFT_GAME_FILTER);
 const root = resolve(process.argv[2] || '../../out/build/web-emscripten-development');
 const output = resolve(process.argv[3] || '../../out/ripple-qa');
 await mkdir(output, {recursive: true});
@@ -47,7 +49,7 @@ try {
   for (const backend of ['webgpu', 'webgl2']) {
     for (const mobile of [false, true]) {
       const name = backend + (mobile ? '-touch' : '-mouse');
-      if (process.env.DRIFT_GAME_FILTER && !name.includes(process.env.DRIFT_GAME_FILTER)) continue;
+      if (!selectedCases.includes(name)) continue;
       const viewport = mobile ? {width: 390, height: 844} : {width: 960, height: 540};
       const context = await browser.newContext({viewport, hasTouch: mobile, deviceScaleFactor: process.env.DRIFT_GAME_SCALE ? report.renderScale : mobile ? report.touchDpr : 1});
       // Bound expensive software-GPU work. No interactive timing claim is made.
@@ -287,6 +289,7 @@ try {
       await context.close(); activePage = undefined;
     }
   }
+  assert.deepEqual(report.cases.map(result => result.name), selectedCases, 'Browser shard missed cases');
 } catch (error) {
   report.failure = String(error); process.exitCode = 1;
   if (activePage) {

@@ -1,0 +1,93 @@
+name: Prepare pinned Sandbox SDK inputs
+description: Reuse dependencies and compiler outputs while regenerating local presets
+inputs:
+  web:
+    description: Also prepare the browser SDK
+    default: 'false'
+runs:
+  using: composite
+  steps:
+    - name: Install system prerequisites
+      shell: bash
+      run: |
+        sudo apt-get update -qq
+        sudo apt-get install -y -qq git python3 python3-venv ca-certificates \
+          clang-18 lld-18 clang-format-18 clang-tidy-18 ccache libwayland-dev wayland-protocols
+    - name: Acquire the pinned Ludus checkout
+      shell: bash
+      run: |
+        python3 - <<'PYTHON'
+        from pathlib import Path
+        import sys
+        sys.path.insert(0, 'scripts/python')
+        import sandbox
+        sandbox.acquire_ludus(Path.cwd(), None)
+        PYTHON
+    - name: Cache pip downloads
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/pip
+        key: pip-sandbox-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('out/ludus/source/config/tool_versions.json') }}
+    # Thanks to GitHub's "Dependency caching reference": one writer owns each
+    # immutable dependency snapshot; the browser job restores the native inputs.
+    # https://docs.github.com/en/actions/reference/workflows-and-actions/dependency-caching
+    - name: Cache native dependencies and shader tools
+      if: inputs.web != 'true'
+      uses: actions/cache@v4
+      with:
+        path: |
+          out/ludus/source/out/conan/home
+          out/ludus/source/out/shader-tools/slang
+          out/ludus/source/out/shader-tools/slang.tar.gz
+          out/ludus/source/out/shader-tools/spirv-tools
+          out/ludus/source/out/shader-tools/spirv-tools.deb
+          out/ludus/source/out/shader-tools/spirv-cross-src/spirv-cross.tar.gz
+        key: sandbox-inputs-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('config/ludus-version.txt', 'out/ludus/source/conanfile.py', 'out/ludus/source/conan.lock', 'out/ludus/source/third_party/**', 'out/ludus/source/config/**', 'out/ludus/source/CMakePresets.json') }}
+    - name: Restore native dependencies and shader tools without saving
+      if: inputs.web == 'true'
+      uses: actions/cache/restore@v4
+      with:
+        path: |
+          out/ludus/source/out/conan/home
+          out/ludus/source/out/shader-tools/slang
+          out/ludus/source/out/shader-tools/slang.tar.gz
+          out/ludus/source/out/shader-tools/spirv-tools
+          out/ludus/source/out/shader-tools/spirv-tools.deb
+          out/ludus/source/out/shader-tools/spirv-cross-src/spirv-cross.tar.gz
+        key: sandbox-inputs-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('config/ludus-version.txt', 'out/ludus/source/conanfile.py', 'out/ludus/source/conan.lock', 'out/ludus/source/third_party/**', 'out/ludus/source/config/**', 'out/ludus/source/CMakePresets.json') }}
+    - name: Cache compiler outputs
+      if: inputs.web != 'true'
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/ccache
+        key: sandbox-ccache-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('config/ludus-version.txt', 'out/ludus/source/config/tool_versions.json', 'out/ludus/source/config/conan/**') }}-${{ github.sha }}
+        restore-keys: |
+          sandbox-ccache-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('config/ludus-version.txt', 'out/ludus/source/config/tool_versions.json', 'out/ludus/source/config/conan/**') }}-
+    - name: Restore compiler outputs without saving
+      if: inputs.web == 'true'
+      uses: actions/cache/restore@v4
+      with:
+        path: ~/.cache/ccache
+        key: sandbox-ccache-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('config/ludus-version.txt', 'out/ludus/source/config/tool_versions.json', 'out/ludus/source/config/conan/**') }}-${{ github.sha }}
+        restore-keys: |
+          sandbox-ccache-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('config/ludus-version.txt', 'out/ludus/source/config/tool_versions.json', 'out/ludus/source/config/conan/**') }}-
+    - name: Cache the pinned browser toolchain
+      if: inputs.web == 'true'
+      uses: actions/cache@v4
+      with:
+        path: out/ludus/source/out/host-tools/emsdk
+        key: sandbox-emsdk-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('out/ludus/source/config/web_toolchain.json') }}
+    - name: Configure compiler caching
+      shell: bash
+      run: |
+        echo 'LUDUS_ENABLE_CCACHE=1' >> "$GITHUB_ENV"
+        ccache --zero-stats
+    - name: Prepare SDKs and regenerate selectable local presets
+      shell: bash
+      env:
+        WITH_WEB: ${{ inputs.web }}
+      run: |
+        options=()
+        if [[ "$WITH_WEB" == true ]]; then options+=(--with-web); fi
+        ./init.sh "${options[@]}"
+        echo "$PWD/out/ludus/source/out/host-tools/venv/bin" >> "$GITHUB_PATH"
