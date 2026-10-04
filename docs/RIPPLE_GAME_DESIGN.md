@@ -1,7 +1,8 @@
 # Drift ripple boat game design
 
-Status: Game design, updated October 3, 2026. The M0/M1 ocean, boat and
-interactive ripples are implemented. Collision, docking and levels remain planned;
+Status: Game design, updated October 3, 2026. The ocean, boat, interactive
+ripples, swept hazards, docking, and Retry are implemented for one authored course.
+Three-level progression remains planned;
 see the [implementation record](RIPPLE_GAME_IMPLEMENTATION.md) for current behavior.
 
 The player rescues a boat with a broken motor by placing ripples on the water.

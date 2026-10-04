@@ -1,0 +1,392 @@
+{
+  "milestone": "M2: danger and arrival",
+  "validated_on": "2026-10-03",
+  "engine_sdk_revision": "9554d051b2125580327d9f89c06395798a53028d",
+  "native_toolchain": "Clang/LLVM 18, C++23, warnings as errors, exceptions disabled",
+  "browser_toolchain": "Emscripten 4.0.23, Slang 2026.1.2",
+  "package": {
+    "path": "out/packages/drift-ocean-web-release.zip",
+    "sha256": "6013e3a1c0e42e4a0ff003627383475fde2029e328c859ee57291c5d84718693",
+    "extracted_payload": "out/browser-qa/final-extracted",
+    "uniform_bytes": {
+      "vertex": 736,
+      "fragment": 736,
+      "wgsl": 736,
+      "glsl_es": 736
+    }
+  },
+  "setup": {
+    "status": "passed",
+    "selectable_configure_and_build_presets": [
+      "ludus-local-linux-clang-development",
+      "ludus-local-web-emscripten-development",
+      "ludus-local-web-emscripten-release"
+    ],
+    "selectable_test_presets": [
+      "ludus-local-linux-clang-development"
+    ],
+    "checks": [
+      "Selected CMake --list-presets=configure, build and test",
+      "Explicit shared project repair configured and built native and both web profiles",
+      "Read-only ludus project check passed after descriptor update"
+    ]
+  },
+  "logic": {
+    "status": "passed",
+    "native_ctest_targets": 3,
+    "independent_gameplay_checks": 455,
+    "sdk_gameplay_checks": 455,
+    "bootstrap_setup_release_python_tests": 25,
+    "asan_ubsan": "455 checks passed with leak detection enabled",
+    "rock_placement_regression": "Center, interior, closed edge, just outside, multiple rocks, no cooldown consumption, and preservation of valid queued input."
+  },
+  "static_analysis": {
+    "status": "passed",
+    "format": "Pinned clang-format 18, all tracked C++ sources",
+    "tidy": [
+      "Clang-tidy 18 on independent sources",
+      "Clang-tidy 18 with real native SDK compilation database",
+      "Clang-tidy 18 on modified browser sources with wasm target/sysroot and SDK includes; removed Emscripten driver-only --use-port flag for analysis"
+    ]
+  },
+  "native_render": {
+    "status": "passed",
+    "backend": "Vulkan",
+    "frames": 120,
+    "adapter": "Intel(R) UHD Graphics 620 (WHL GT2)"
+  },
+  "browser": {
+    "status": "passed",
+    "browser_version": "140.0.7339.186",
+    "gpu": "SwiftShader software GPU",
+    "touch": "Emulated touch; physical devices unverified",
+    "game_raf_delay_ms": 50,
+    "ocean_raf_delay_ms": 100,
+    "game_cases": [
+      {
+        "name": "webgpu-mouse",
+        "status": "passed",
+        "push": {
+          "x": "0.1484535868196149",
+          "y": "-22",
+          "placements": "1",
+          "contacts": "1",
+          "ticks": "22",
+          "rings": "1",
+          "result": "2",
+          "cooldown": "0.26666666666666666",
+          "paused": "true",
+          "enabled": "true",
+          "vx": "2.1752491558929363",
+          "vy": "0",
+          "docking": "0",
+          "crash": "0",
+          "phase": "playing"
+        },
+        "crashed": {
+          "x": "0",
+          "y": "-7",
+          "placements": "6",
+          "contacts": "6",
+          "ticks": "298",
+          "rings": "2",
+          "result": "3",
+          "cooldown": "0.4",
+          "paused": "false",
+          "enabled": "true",
+          "vx": "0",
+          "vy": "0",
+          "docking": "0",
+          "crash": "1",
+          "phase": "crashed"
+        },
+        "arrived": {
+          "x": "2.6806157393424943",
+          "y": "23.638701633934527",
+          "placements": "19",
+          "contacts": "19",
+          "ticks": "1385",
+          "rings": "0",
+          "result": "0",
+          "cooldown": "0",
+          "paused": "false",
+          "enabled": "true",
+          "vx": "-0.6428657229940321",
+          "vy": "0.17193710669991985",
+          "docking": "1",
+          "crash": "0",
+          "phase": "arrived"
+        },
+        "errors": []
+      },
+      {
+        "name": "webgpu-touch",
+        "status": "passed",
+        "push": {
+          "x": "0.29013849526524393",
+          "y": "-22.000000181627136",
+          "placements": "1",
+          "contacts": "1",
+          "ticks": "25",
+          "rings": "1",
+          "result": "0",
+          "cooldown": "0",
+          "paused": "true",
+          "enabled": "true",
+          "vx": "2.076069654771967",
+          "vy": "-0.0000012996227311994049",
+          "docking": "0",
+          "crash": "0",
+          "phase": "playing"
+        },
+        "crashed": {
+          "x": "0",
+          "y": "-7",
+          "placements": "6",
+          "contacts": "6",
+          "ticks": "302",
+          "rings": "2",
+          "result": "2",
+          "cooldown": "0.4",
+          "paused": "false",
+          "enabled": "true",
+          "vx": "0",
+          "vy": "0",
+          "docking": "0",
+          "crash": "1",
+          "phase": "crashed"
+        },
+        "arrived": {
+          "x": "2.6806157393424943",
+          "y": "23.638701633934527",
+          "placements": "19",
+          "contacts": "19",
+          "ticks": "1385",
+          "rings": "0",
+          "result": "0",
+          "cooldown": "0",
+          "paused": "false",
+          "enabled": "true",
+          "vx": "-0.6428657229940321",
+          "vy": "0.17193710669991985",
+          "docking": "1",
+          "crash": "0",
+          "phase": "arrived"
+        },
+        "errors": []
+      },
+      {
+        "name": "webgl2-mouse",
+        "status": "passed",
+        "push": {
+          "x": "0.29013850356637005",
+          "y": "-22",
+          "placements": "1",
+          "contacts": "1",
+          "ticks": "23",
+          "rings": "1",
+          "result": "0",
+          "cooldown": "0",
+          "paused": "true",
+          "enabled": "true",
+          "vx": "2.076069714170208",
+          "vy": "0",
+          "docking": "0",
+          "crash": "0",
+          "phase": "playing"
+        },
+        "crashed": {
+          "x": "0",
+          "y": "-7",
+          "placements": "6",
+          "contacts": "6",
+          "ticks": "306",
+          "rings": "2",
+          "result": "2",
+          "cooldown": "0.6666666666666666",
+          "paused": "false",
+          "enabled": "true",
+          "vx": "0",
+          "vy": "0",
+          "docking": "0",
+          "crash": "1",
+          "phase": "crashed"
+        },
+        "arrived": {
+          "x": "2.6789138608982443",
+          "y": "23.63421473991204",
+          "placements": "19",
+          "contacts": "19",
+          "ticks": "1388",
+          "rings": "0",
+          "result": "0",
+          "cooldown": "0",
+          "paused": "false",
+          "enabled": "true",
+          "vx": "-0.6343534085080302",
+          "vy": "0.17265726694944877",
+          "docking": "1",
+          "crash": "0",
+          "phase": "arrived"
+        },
+        "errors": []
+      },
+      {
+        "name": "webgl2-touch",
+        "status": "passed",
+        "push": {
+          "x": "0.11198712362398906",
+          "y": "-22.00000007010411",
+          "placements": "1",
+          "contacts": "1",
+          "ticks": "17",
+          "rings": "1",
+          "result": "2",
+          "cooldown": "0.3333333333333333",
+          "paused": "true",
+          "enabled": "true",
+          "vx": "2.2007756149208455",
+          "vy": "-0.0000013776888501049052",
+          "docking": "0",
+          "crash": "0",
+          "phase": "playing"
+        },
+        "crashed": {
+          "x": "0",
+          "y": "-7",
+          "placements": "6",
+          "contacts": "6",
+          "ticks": "309",
+          "rings": "2",
+          "result": "2",
+          "cooldown": "0.4666666666666667",
+          "paused": "false",
+          "enabled": "true",
+          "vx": "0",
+          "vy": "0",
+          "docking": "0",
+          "crash": "1",
+          "phase": "crashed"
+        },
+        "arrived": {
+          "x": "2.6864210740203247",
+          "y": "23.642090238387798",
+          "placements": "19",
+          "contacts": "19",
+          "ticks": "1396",
+          "rings": "0",
+          "result": "0",
+          "cooldown": "0",
+          "paused": "false",
+          "enabled": "true",
+          "vx": "-0.6289646304513963",
+          "vy": "0.17461420510257247",
+          "docking": "1",
+          "crash": "0",
+          "phase": "arrived"
+        },
+        "errors": []
+      }
+    ],
+    "ocean_cases": [
+      {
+        "name": "webgpu: real ocean pixels, controls, pause, restart",
+        "status": "passed",
+        "pixelVariation": 61.03201330197503
+      },
+      {
+        "name": "webgl2: real ocean pixels, controls, pause, restart",
+        "status": "passed",
+        "pixelVariation": 61.03201330197503
+      },
+      {
+        "name": "WebGPU and WebGL 2 ocean orientation and palette agree",
+        "status": "passed",
+        "meanPixelDifference": 0
+      },
+      {
+        "name": "Auto fallback after missing",
+        "status": "passed",
+        "backend": "webgl2"
+      },
+      {
+        "name": "Auto fallback after adapter",
+        "status": "passed",
+        "backend": "webgl2"
+      },
+      {
+        "name": "Auto fallback after device",
+        "status": "passed",
+        "backend": "webgl2"
+      },
+      {
+        "name": "Auto fallback after surface",
+        "status": "passed",
+        "backend": "webgl2"
+      },
+      {
+        "name": "forced WebGPU fails explicitly without fallback",
+        "status": "passed"
+      },
+      {
+        "name": "both unavailable: readable narrow error and restart",
+        "status": "passed"
+      },
+      {
+        "name": "narrow responsive controls, DPR, iframe",
+        "status": "passed"
+      },
+      {
+        "name": "WebGL 2 loss, restart and repeated resize",
+        "status": "passed",
+        "loseContext": true
+      },
+      {
+        "name": "network failure index.js",
+        "status": "passed"
+      },
+      {
+        "name": "network failure index.wasm",
+        "status": "passed"
+      }
+    ],
+    "game_report": "out/browser-qa/m2-ripple-results/report.json",
+    "ocean_report": "out/browser-qa/m2-ocean-results/report.json",
+    "screenshots": [
+      "out/browser-qa/m2-ripple-results/webgpu-mouse.png",
+      "out/browser-qa/m2-ripple-results/webgpu-mouse-crashed.png",
+      "out/browser-qa/m2-ripple-results/webgpu-mouse-arrived.png",
+      "out/browser-qa/m2-ripple-results/webgpu-touch.png",
+      "out/browser-qa/m2-ripple-results/webgpu-touch-crashed.png",
+      "out/browser-qa/m2-ripple-results/webgpu-touch-arrived.png",
+      "out/browser-qa/m2-ripple-results/webgl2-mouse.png",
+      "out/browser-qa/m2-ripple-results/webgl2-mouse-crashed.png",
+      "out/browser-qa/m2-ripple-results/webgl2-mouse-arrived.png",
+      "out/browser-qa/m2-ripple-results/webgl2-touch.png",
+      "out/browser-qa/m2-ripple-results/webgl2-touch-crashed.png",
+      "out/browser-qa/m2-ripple-results/webgl2-touch-arrived.png"
+    ],
+    "game_device_scale_factor": 1,
+    "density_coverage": "Long rescue navigation uses DPR 1 on SwiftShader; the ocean suite separately verifies DPR 2."
+  },
+  "commands": [
+    "cmake --list-presets=configure; cmake --list-presets=build; cmake --list-presets=test",
+    "cmake --build --preset ludus-local-linux-clang-development",
+    "ctest --preset ludus-local-linux-clang-development",
+    "cmake --build --preset ludus-local-web-emscripten-development",
+    "cmake --build --preset ludus-local-web-emscripten-release",
+    "python3 -m unittest discover -s scripts/python -p 'test_*.py'",
+    "./scripts/package-web",
+    "python3 -m zipfile -e out/packages/drift-ocean-web-release.zip out/browser-qa/final-extracted",
+    "node tools/browser-tests/run.mjs out/browser-qa/final-extracted out/packages/drift-ocean-web-release.zip out/browser-qa/m2-ocean-results",
+    "node tools/browser-tests/ripple.mjs out/browser-qa/final-extracted out/browser-qa/m2-ripple-results"
+  ],
+  "remaining_acceptance": [
+    "Fresh-player steering feedback",
+    "Physical mobile input and hardware performance",
+    "Native pointer input wiring",
+    "Three-level progression (M3)",
+    "Hosted deployment"
+  ],
+  "ci": "Local validation recorded here; GitHub CI results belong to the pull request."
+}

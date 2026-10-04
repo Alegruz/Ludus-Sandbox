@@ -1,6 +1,6 @@
 # Drift ripple game milestones
 
-Status: M0/M1 first playable slice implemented, October 3, 2026. Sequence is by working acceptance
+Status: M0–M2 implemented, October 3, 2026. Sequence is by working acceptance
 gates, not calendar estimates: jam deadline and remaining developer hours have
 not been supplied. Do not invent a release date from earlier preparation notes.
 
@@ -32,8 +32,8 @@ not prerequisites for this fullscreen procedural slice.
 
 M0/M1 code and automated software-GPU acceptance now pass; see the
 [implementation record](RIPPLE_GAME_IMPLEMENTATION.md). Physical touch, physical
-GPU performance, native runtime and a fresh-player steering trial remain open.
-M2–M4 gameplay delivery is pending. The packaged M1 build exercises the existing
+GPU performance, native interactive input and a fresh-player steering trial remain open.
+M2 now supplies the rock/dock/crash/retry loop; see [its implementation record](RIPPLE_GAME_M2.md). M3–M4 gameplay delivery is pending. The packaged M1 build exercises the existing
 release path; it does not complete M4's full-game acceptance.
 
 ## M0 Establish a running baseline

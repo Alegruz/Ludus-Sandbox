@@ -5,7 +5,9 @@ SDK kernels and validated current/drag tuning to this baseline.
 
 Status: Game contracts, updated October 3, 2026. M0/M1 is implemented in
 `src/game/ripple_game.*` and `game_render.*`, with scene ownership in the existing
-ocean controller. Collision, docking and level modules below remain proposed.
+ocean controller. Bounded level definitions, swept collision, docking, and terminal phases now live
+in the same pure simulation; see [M2](RIPPLE_GAME_M2.md). Splitting these into the
+suggested modules below is optional as the game grows.
 See the [implementation record](RIPPLE_GAME_IMPLEMENTATION.md) for actual types,
 SDK versions and acceptance evidence.
 
