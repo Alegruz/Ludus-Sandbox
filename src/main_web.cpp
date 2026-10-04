@@ -63,7 +63,7 @@ EM_JS(void, PresentState, (int state, int error, unsigned frames, int backend, i
     const messages = [
         'Stopped. Select Restart to play.',
         'Loading the ocean\u2026',
-        'Drift is ready.',
+        'Poseidon Saves the Day',
         'The ocean could not start. Try Restart.',
         'Graphics connection lost. Select Restart to try again.'];
     let message = messages[state] || "";
@@ -130,7 +130,8 @@ EM_JS(void, PresentGame, (float64 x, float64 y, uint32 placements, uint32 contac
     button.disabled = enabled && phase !== 0;
     button.setAttribute('aria-pressed', String(!!paused));
     const mode = document.getElementById('mode');
-    mode.textContent = enabled ? 'Ocean' : 'Boat';
+    mode.textContent = enabled ? 'Ocean' : 'Rescue';
+    mode.setAttribute('aria-expanded', String(!enabled));
     mode.setAttribute('aria-label', enabled ? 'Switch to ocean tuning' : 'Return to boat game');
     const next = document.getElementById('game-next');
     next.hidden = !enabled || phase !== 2;

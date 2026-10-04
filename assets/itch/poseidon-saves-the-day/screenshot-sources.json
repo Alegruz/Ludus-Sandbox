@@ -1,0 +1,29 @@
+[
+  {
+    "filename": "screenshot-01-swirl.png",
+    "kind": "unaltered-gameplay-capture",
+    "source": "docs/screenshots/poseidon-flow-swirl.png",
+    "caption": "Stirring the painted water to guide the boat",
+    "sha256": "d6a2d2c2a3cf3f6f0e07645ce77096263d631a52a704bafa9c3af487f12533b9",
+    "note": "Captured from the banner-inspired art pass using a real software GPU. The channel capture shows an active traversal.",
+    "revision_note": "Captured before integration with the current wind-wave and mobile-HUD changes."
+  },
+  {
+    "filename": "screenshot-02-rescue.png",
+    "kind": "unaltered-gameplay-capture",
+    "source": "docs/screenshots/poseidon-rock-rescue.png",
+    "caption": "Successful rescue around the rock",
+    "sha256": "765efd549e750ffdc95ef6d04a5b856059b209dd74f3ce740d4ea94e1b82ef4e",
+    "note": "Captured from the banner-inspired art pass using a real software GPU. The channel capture shows an active traversal.",
+    "revision_note": "Captured before integration with the current wind-wave and mobile-HUD changes."
+  },
+  {
+    "filename": "screenshot-03-channel.png",
+    "kind": "unaltered-gameplay-capture",
+    "source": "docs/screenshots/poseidon-channel.png",
+    "caption": "Steering through the final channel",
+    "sha256": "62939cd306958e3ce5ed394ca68657adab85074b7da59ba73fb832c8442a314f",
+    "note": "Captured from the banner-inspired art pass using a real software GPU. The channel capture shows an active traversal.",
+    "revision_note": "Captured before integration with the current wind-wave and mobile-HUD changes."
+  }
+]

@@ -22,6 +22,9 @@ rendering. The recorded flags and delay do not establish physical-GPU support,
 flag-free user compatibility, interactive performance or hosted acceptance.
 Screenshots, requests, ZIP identity and results go to `out/browser-qa/results`.
 The harness and its dependencies are never included in the game package.
+On a busy software-rendering host, `DRIFT_QA_RAF_MS=500` increases the test-only
+delay for the renderer, game and gesture harnesses. The report records the actual delay;
+this setting changes neither the packaged game nor the assertions.
 
 ## Mobile HUD
 
