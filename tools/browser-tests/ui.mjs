@@ -112,7 +112,7 @@ try {
     await page.evaluate(() => { Module._DriftSetFocused(1); Module._OceanSetWaveIntensity(0); });
     await frames(page); await page.locator('#game-reset').click();
     await until(() => state(page), s => Number(s.energy) === 0, 'calm reset');
-    const view = await canvasView(page), tap = view.point(-5, -22);
+    const view = await canvasView(page), tap = view.point(-5, -60);
     await page.touchscreen.tap(tap.x, tap.y);
     await until(() => state(page), s => Number(s.placements) === 1, 'touch mapping on inset canvas');
     await page.locator('#help-toggle').click();

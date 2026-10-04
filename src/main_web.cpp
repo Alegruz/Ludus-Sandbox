@@ -100,11 +100,11 @@ EM_JS(void, PublishSettings, (const char* json), {
 EM_JS(void, PresentGame, (float64 x, float64 y, uint32 placements, uint32 contacts, uint32 ticks,
                          uint32 rings, float64 energy, float64 curl, float64 divergence, float64 height, uint32 result, float64 cooldown, int paused, int enabled,
                          uint32 phase, uint32 crash, float64 vx, float64 vy, float64 docking,
-                         uint32 course, uint32 courseCount, int32 complete, const char* title, const char* instruction), {
+                         uint32 course, uint32 courseCount, int32 complete, const char* title, const char* instruction, float64 cameraX, float64 cameraY, float64 cameraWidth, float64 cameraHeight), {
     const hud = document.getElementById('game-status');
     if (!hud) return;
     Object.assign(hud.dataset, {x, y, placements, contacts, ticks, rings, energy, curl, divergence, height, result, cooldown,
-                               paused: String(!!paused), enabled: String(!!enabled), vx, vy, docking, crash,
+                               cameraX, cameraY, cameraWidth, cameraHeight, paused: String(!!paused), enabled: String(!!enabled), vx, vy, docking, crash,
                                phase: ['playing', 'crashed', 'arrived'][phase], course, courseCount, complete: String(!!complete)});
     const heading = document.getElementById('course-title');
     const headingText = enabled ? 'Course ' + course + ' / ' + courseCount + ' \u2014 ' + UTF8ToString(title) : 'Ocean playground';
@@ -168,6 +168,7 @@ void Frame() noexcept
     const auto& game = gScene.GetGame();
     const auto& boat = game.GetBoat();
     const auto water = game.GetWater().Diagnostics();
+    const auto camera = gScene.GetCamera();
     PresentGame(boat.Position.X,
                 boat.Position.Y,
                 static_cast<uint32>(game.Placements()),
@@ -191,7 +192,11 @@ void Frame() noexcept
                 ludus::sandbox::game::kCourseCount,
                 game.CampaignComplete() ? 1 : 0,
                 ludus::sandbox::game::CourseTitle(game.CourseIndex()),
-                ludus::sandbox::game::CourseInstruction(game.CourseIndex()));
+                ludus::sandbox::game::CourseInstruction(game.CourseIndex()),
+                camera.Center.X,
+                camera.Center.Y,
+                camera.Width,
+                camera.Height);
 }
 } // namespace
 

@@ -97,6 +97,7 @@ public:
     void ResetSimulation() noexcept
     {
         ocean::ResetTime(mClock);
+        (void)mGame.SetSeaState(mStore->Get().WaveIntensity);
         mGame.Reset();
         CancelGameInput();
     }
@@ -119,6 +120,10 @@ public:
     [[nodiscard]] const game::RippleGame& GetGame() const noexcept
     {
         return mGame;
+    }
+    [[nodiscard]] game::Camera GetCamera() const noexcept
+    {
+        return mCamera;
     }
     [[nodiscard]] bool GameEnabled() const noexcept
     {
@@ -159,6 +164,7 @@ private:
     ocean::SceneClock mClock;
     game::RippleGame mGame;
     game::Camera mCamera;
+    game::Camera mStrokeCamera;
     bool mGameEnabled = true;
     bool mFocused = true;
     bool mSkipDelta = true;
