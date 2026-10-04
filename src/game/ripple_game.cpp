@@ -117,14 +117,17 @@ const char* CourseInstruction(uint32 index) noexcept
 bool RippleGame::LoadCourse(uint32 index) noexcept
 {
     LevelDefinition level;
-    RippleGame next;
-    if (!TryGetCourseLevel(index, level) || !next.LoadLevel(level))
+    if (!TryGetCourseLevel(index, level))
     {
         return false;
     }
-    next.mCampaignActive = true;
-    next.mCourseIndex = index;
-    *this = next;
+    if (!LoadLevel(level))
+    {
+        return false;
+    }
+    (void)SetPhysics({});
+    mCampaignActive = true;
+    mCourseIndex = index;
     return true;
 }
 
@@ -318,6 +321,7 @@ bool RingContact(Point start, Point end, Point origin, float64 ringStart, float6
 RippleGame::RippleGame() noexcept
 {
     (void)SetPhysics({});
+    (void)mWater.Reset(mLevel);
 }
 
 bool RippleGame::SetPhysics(const PhysicsSettings& settings) noexcept
@@ -388,39 +392,17 @@ PlacementResult RippleGame::BeginStroke(Point world) noexcept
         mLastPlacement = PlacementResult::Outside;
         return mLastPlacement;
     }
+    if (!mWater.Ready())
+    {
+        mLastPlacement = PlacementResult::Capacity;
+        return mLastPlacement;
+    }
     mStroking = true;
-    mStrokeCount = 1;
-    mStroke[0] = world;
-    mStrokeSlot = kSurfaceCapacity;
-    mStrokeDirection = {};
+    mStrokeStart = world;
+    mStrokePrevious = world;
     mStrokeDistance = 0.0;
-    mStrokeTurn = 0.0;
-    mStrokeAbsoluteTurn = 0.0;
+    mStrokeFlowing = false;
     return PlacementResult::Queued;
-}
-
-SurfaceEffect* RippleGame::StrokeEffect() noexcept
-{
-    if (mStrokeSlot < kSurfaceCapacity)
-    {
-        if (mSurface[mStrokeSlot].Active)
-        {
-            return &mSurface[mStrokeSlot];
-        }
-        mStrokeSlot = kSurfaceCapacity;
-    }
-    for (usize i = 0; i < kSurfaceCapacity; ++i)
-    {
-        if (!mSurface[i].Active)
-        {
-            mStrokeSlot = i;
-            mSurface[i] = {};
-            mSurface[i].Active = true;
-            mSurface[i].Origin = mStroke[0];
-            return &mSurface[i];
-        }
-    }
-    return nullptr;
 }
 
 PlacementResult RippleGame::MoveStroke(Point world) noexcept
@@ -429,92 +411,38 @@ PlacementResult RippleGame::MoveStroke(Point world) noexcept
     {
         return PlacementResult::Inactive;
     }
-    if (!ClearWater(world, mLevel))
+    bool clear = ClearWater(world, mLevel);
+    for (usize i = 0; i < mLevel.RockCount && clear; ++i)
+    {
+        float64 time = 0.0;
+        clear = !CircleContact(mStrokePrevious, world, mLevel.Rocks[i].Center, mLevel.Rocks[i].Radius, time);
+    }
+    if (!clear)
     {
         mStroking = false;
         mLastPlacement = PlacementResult::Outside;
         return mLastPlacement;
     }
-    const Point previous = mStroke[mStrokeCount - 1];
-    const Point segment{world.X - previous.X, world.Y - previous.Y};
-    const float64 distance = Length(segment);
-    // Ignore pointer jitter and duplicate events, independent of event frequency.
+    const float64 distance = Length({world.X - mStrokePrevious.X, world.Y - mStrokePrevious.Y});
     if (distance < 0.4)
     {
-        return PlacementResult::Queued;
+        return mStrokeFlowing ? PlacementResult::Placed : PlacementResult::Queued;
     }
-    if (Length(mStrokeDirection) > kEpsilon)
-    {
-        const float64 turn = std::atan2(mStrokeDirection.X * segment.Y - mStrokeDirection.Y * segment.X,
-                                        mStrokeDirection.X * segment.X + mStrokeDirection.Y * segment.Y);
-        mStrokeTurn += turn;
-        mStrokeAbsoluteTurn += std::abs(turn);
-    }
-    mStrokeDirection = segment;
     mStrokeDistance += distance;
-    if (mStrokeCount == kStrokeCapacity)
+    if (mStrokeDistance >= 2.5)
     {
-        for (usize i = 1; i < kStrokeCapacity; ++i)
+        const Point start = mStrokeFlowing ? mStrokePrevious : mStrokeStart;
+        if (!mWater.Stroke(start, world))
         {
-            mStroke[i - 1] = mStroke[i];
+            mLastPlacement = PlacementResult::Outside;
+            mStroking = false;
+            return mLastPlacement;
         }
-        --mStrokeCount;
+        mStrokeFlowing = true;
+        mLastPlacement = PlacementResult::Placed;
     }
-    mStroke[mStrokeCount++] = world;
-    if (mStrokeDistance < 2.5)
-    {
-        return PlacementResult::Queued;
-    }
-    auto* effect = StrokeEffect();
-    if (effect == nullptr)
-    {
-        return PlacementResult::Capacity;
-    }
-    const bool circular =
-        mStrokeCount >= 6 && std::abs(mStrokeTurn) > 1.5 && std::abs(mStrokeTurn) > mStrokeAbsoluteTurn * 0.65;
-    if (circular)
-    {
-        // Fit three spaced samples to a circle. A repeated closing point is
-        // deliberately excluded; nearly collinear samples keep the prior fit.
-        const Point a = mStroke[0];
-        const Point b{mStroke[mStrokeCount / 3].X - a.X, mStroke[mStrokeCount / 3].Y - a.Y};
-        const Point c{mStroke[mStrokeCount * 2 / 3].X - a.X, mStroke[mStrokeCount * 2 / 3].Y - a.Y};
-        const float64 determinant = 2.0 * (b.X * c.Y - b.Y * c.X);
-        if (std::abs(determinant) > 0.1)
-        {
-            const float64 bb = b.X * b.X + b.Y * b.Y;
-            const float64 cc = c.X * c.X + c.Y * c.Y;
-            const Point center{a.X + (bb * c.Y - cc * b.Y) / determinant, a.Y + (cc * b.X - bb * c.X) / determinant};
-            const float64 radius = Length({a.X - center.X, a.Y - center.Y});
-            if (ClearWater(center, mLevel) && radius >= 1.0 && radius <= 18.0)
-            {
-                if (effect->Kind != SurfaceKind::Vortex)
-                {
-                    effect->Age = 0.0;
-                    effect->PreviousAge = 0.0;
-                }
-                effect->Kind = SurfaceKind::Vortex;
-                effect->DecayAge = 0.0;
-                effect->Origin = center;
-                effect->Radius = radius * 1.8 < 5.0 ? 5.0 : radius * 1.8;
-                const float64 strength = std::abs(mStrokeTurn) / 4.0;
-                effect->Strength =
-                    (mStrokeTurn > 0.0 ? 1.0 : -1.0) * (strength > 1.8 ? 1.8 : (strength < 0.8 ? 0.8 : strength));
-            }
-        }
-    }
-    if (effect->Kind == SurfaceKind::Wave)
-    {
-        const Point displacement{world.X - effect->Origin.X, world.Y - effect->Origin.Y};
-        const float64 length = Length(displacement);
-        if (length > kEpsilon)
-        {
-            effect->Direction = {displacement.X / length, displacement.Y / length};
-        }
-        effect->Radius = 5.0 + (mStrokeDistance < 16.0 ? mStrokeDistance : 16.0) * 0.4;
-        effect->Strength = 0.6 + (mStrokeDistance < 20.0 ? mStrokeDistance : 20.0) * 0.06;
-    }
-    return PlacementResult::Placed;
+    mStrokePrevious = world;
+    return mStrokeFlowing ? PlacementResult::Placed : PlacementResult::Queued;
 }
 
 PlacementResult RippleGame::EndStroke(Point world) noexcept
@@ -525,61 +453,13 @@ PlacementResult RippleGame::EndStroke(Point world) noexcept
         return result;
     }
     mStroking = false;
-    return mStrokeDistance < 2.5 ? Place(mStroke[0]) : result;
-}
-
-uint32 RippleGame::ActiveSurfaceEffects(SurfaceKind kind) const noexcept
-{
-    uint32 count = 0;
-    for (const auto& effect : mSurface)
-    {
-        count += effect.Active && effect.Kind == kind ? 1U : 0U;
-    }
-    return count;
+    return mStrokeFlowing ? result : Place(mStrokeStart);
 }
 
 Point RippleGame::WaterAt(Point world) const noexcept
 {
-    Point velocity = mPhysics.WaterVelocity;
-    for (const auto& effect : mSurface)
-    {
-        if (!effect.Active)
-        {
-            continue;
-        }
-        const Point relative{world.X - effect.Origin.X, world.Y - effect.Origin.Y};
-        const float64 lifetime = effect.Kind == SurfaceKind::Wave ? kWaveLifetime : kVortexLifetime;
-        const float64 decayAge = effect.Kind == SurfaceKind::Wave ? effect.Age : effect.DecayAge;
-        const float64 remaining = 1.0 - decayAge / lifetime;
-        const float64 fade = remaining * remaining;
-        if (effect.Kind == SurfaceKind::Vortex)
-        {
-            const float64 distance = Length(relative);
-            const float64 envelope = 1.0 - distance * distance / (effect.Radius * effect.Radius);
-            if (envelope > 0.0)
-            {
-                const float64 speed =
-                    5.0 * effect.Strength * fade * envelope * envelope / (distance + effect.Radius * 0.15);
-                velocity.X -= relative.Y * speed;
-                velocity.Y += relative.X * speed;
-            }
-        }
-        else
-        {
-            const float64 along = relative.X * effect.Direction.X + relative.Y * effect.Direction.Y;
-            const float64 across = -relative.X * effect.Direction.Y + relative.Y * effect.Direction.X;
-            const float64 front = (along - effect.Age * kWaveSpeed) / 2.0;
-            const float64 envelope = 1.0 - across * across / (effect.Radius * effect.Radius);
-            if (std::abs(front) < 1.0 && envelope > 0.0)
-            {
-                const float64 crest = 1.0 - front * front;
-                const float64 speed = 8.0 * effect.Strength * fade * crest * crest * envelope * envelope;
-                velocity.X += effect.Direction.X * speed;
-                velocity.Y += effect.Direction.Y * speed;
-            }
-        }
-    }
-    return velocity;
+    const auto water = mWater.Sample(world);
+    return {mPhysics.WaterVelocity.X + water.VelocityX, mPhysics.WaterVelocity.Y + water.VelocityY};
 }
 
 void RippleGame::CancelInput() noexcept
@@ -592,26 +472,35 @@ void RippleGame::CancelInput() noexcept
     {
         ripple.PreviousAge = ripple.Age;
     }
-    for (auto& effect : mSurface)
-    {
-        effect.PreviousAge = effect.Age;
-    }
 }
 
 void RippleGame::Reset() noexcept
 {
-    const auto settings = mPhysics;
-    const auto level = mLevel;
-    const bool campaignActive = mCampaignActive;
-    const auto courseIndex = mCourseIndex;
-    *this = RippleGame{};
-    mLevel = level;
-    mCampaignActive = campaignActive;
-    mCourseIndex = courseIndex;
-    (void)SetPhysics(settings);
-    mBoat.Position = level.Spawn;
-    mBoat.PreviousPosition = level.Spawn;
-    mBoat.Velocity = level.SpawnVelocity;
+    (void)mWater.Reset(mLevel);
+    mStroking = false;
+    mStrokeFlowing = false;
+    mStrokeDistance = 0.0;
+    mPhase = GamePhase::Playing;
+    mCrash = CrashReason::None;
+    mDockTicks = 0;
+    mTerminalTransitions = 0;
+    mBoat = {};
+    for (auto& ripple : mRipples)
+    {
+        ripple = {};
+    }
+    mInputCount = 0;
+    mCooldown = 0;
+    mNextId = 1;
+    mTicks = 0;
+    mPlacements = 0;
+    mContacts = 0;
+    mDiscardedTicks = 0;
+    mAccumulator = 0.0;
+    mLastPlacement = PlacementResult::Ready;
+    mBoat.Position = mLevel.Spawn;
+    mBoat.PreviousPosition = mLevel.Spawn;
+    mBoat.Velocity = mLevel.SpawnVelocity;
     if (Length(mBoat.Velocity) > 0.05)
     {
         mBoat.Heading = std::atan2(mBoat.Velocity.Y, mBoat.Velocity.X);
@@ -871,21 +760,7 @@ void RippleGame::Tick() noexcept
             ripple.Active = false;
         }
     }
-    for (auto& effect : mSurface)
-    {
-        if (effect.Active)
-        {
-            effect.PreviousAge = effect.Age;
-            effect.Age += kTickSeconds * travelFraction;
-            effect.DecayAge += kTickSeconds * travelFraction;
-            const float64 lifetime = effect.Kind == SurfaceKind::Wave ? kWaveLifetime : kVortexLifetime;
-            const float64 decayAge = effect.Kind == SurfaceKind::Wave ? effect.Age : effect.DecayAge;
-            if (decayAge >= lifetime - kEpsilon)
-            {
-                effect.Active = false;
-            }
-        }
-    }
+    mWater.Advance(kTickSeconds * travelFraction);
     ++mTicks;
 }
 } // namespace ludus::sandbox::game

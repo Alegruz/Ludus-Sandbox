@@ -1,0 +1,386 @@
+{
+  "change": "Gesture momentum, circulation and divergence-driven free surface",
+  "recorded_on": "2026-10-04",
+  "sandbox_base_revision": "d700375d90493465cba5dc9e3739dfae53e1eec2",
+  "engine_sdk_revision": "9554d051b2125580327d9f89c06395798a53028d",
+  "production_source_sha256": {
+    "src/game/water_field.h": "83929a6a47aaed06631b75a2f82731403bc1874fe6c504c132c53585cdc54a8b",
+    "src/game/water_field.cpp": "d20ea656d3a42cc7bfca96e47bb18e71d5de519db1645e154508e72198a17ae5",
+    "src/game/ripple_game.h": "b44008d7c66c2ad9f8c74bd37f66cc96268f4387bf3396b761d9d9c836c581b2",
+    "src/game/ripple_game.cpp": "466553bf25c468005e884f031cfaa13d2dcf8148cea1fe30574b98af0e3fdf9c",
+    "src/game/game_render.cpp": "64eb080c94e220276ad9bfe2e4ff84803b12cdb37494d36b35e0d6170d188034",
+    "src/main_web.cpp": "e90a688912095559cebe529bed94d00c3431aca5e3b88c605b18726103eee017",
+    "src/ocean/ocean_uniforms.h": "1205a8c6de32e9d15051813af1edb7993dc6ff936bbf2feb870d62362aeb995e",
+    "shaders/ocean.slang": "bbc3bc40ac6b97157ed3838a4d85617779afc667f666419bccb37cb0ae749038",
+    "web/shell.html": "6030108df4fb1bba78a40d7d0fc4d3588d15ef0037f6b65619d199dcd13976db"
+  },
+  "package": {
+    "path": "out/packages/drift-ocean-web-release.zip",
+    "sha256": "4dd7dddaab5327c5450ffdcf64db319a744cf9a5cfecb3315f81a023672fa74b",
+    "extracted_payload": "out/ocean-flow/accepted-extracted",
+    "runtime_sha256": {
+      "index.js": "9f8beb51e204f90a1ba372f052e56d3f0465a39d2d5409b36b44b93a7e801040",
+      "index.wasm": "df294e32424f47d7ac9ff9ec256453f98764fefe6afa7d9db29e406a52a14d77",
+      "index.html": "6030108df4fb1bba78a40d7d0fc4d3588d15ef0037f6b65619d199dcd13976db"
+    },
+    "uniform_bytes": {
+      "fragment": 3840,
+      "glsl_es": 3840,
+      "vertex": 3840,
+      "wgsl": 3840
+    }
+  },
+  "builds": {
+    "native_development": "passed",
+    "browser_development": "passed",
+    "browser_release": "passed",
+    "warnings_as_errors": true,
+    "exceptions": false
+  },
+  "logic": {
+    "ctest_targets": 3,
+    "ocean_checks": 81,
+    "gameplay_checks_per_variant": 2340,
+    "standalone": "passed",
+    "real_sdk": "passed",
+    "asan_ubsan_standalone": "passed",
+    "python_setup_and_release_tests": 25,
+    "clang_18_format": "passed",
+    "clang_18_tidy_changed_sources_and_web_bridge": "passed"
+  },
+  "browsers": {
+    "chromium": "140.0.7339.186",
+    "hardware": "SwiftShader",
+    "physical_mobile_input": false,
+    "gestures": {
+      "kind": "Software GPU; mouse and emulated touch",
+      "cases": [
+        {
+          "name": "webgpu-mouse",
+          "status": "passed",
+          "wave": {
+            "x": "0.11215872820210535",
+            "y": "-22.00073440607192",
+            "placements": "0",
+            "contacts": "0",
+            "ticks": "108",
+            "rings": "0",
+            "energy": "902.1697935978045",
+            "curl": "1.1653242305404479",
+            "divergence": "1.4903401138177437",
+            "height": "1.257556041009344",
+            "result": "2",
+            "cooldown": "0",
+            "paused": "false",
+            "enabled": "true",
+            "vx": "0.6298481789633801",
+            "vy": "-0.0030202325790982584",
+            "docking": "0",
+            "crash": "0",
+            "phase": "playing",
+            "course": "1",
+            "courseCount": "3",
+            "complete": "false"
+          },
+          "errors": []
+        },
+        {
+          "name": "webgpu-touch",
+          "status": "passed",
+          "wave": {
+            "x": "0.13489156945687264",
+            "y": "-22.000899134752764",
+            "placements": "0",
+            "contacts": "0",
+            "ticks": "60",
+            "rings": "0",
+            "energy": "945.4221495455816",
+            "curl": "1.8724638461277725",
+            "divergence": "0.8485185055204814",
+            "height": "1.00092722884063",
+            "result": "2",
+            "cooldown": "0",
+            "paused": "false",
+            "enabled": "true",
+            "vx": "0.5990440204535568",
+            "vy": "-0.0034846850064355825",
+            "docking": "0",
+            "crash": "0",
+            "phase": "playing",
+            "course": "1",
+            "courseCount": "3",
+            "complete": "false"
+          },
+          "errors": []
+        },
+        {
+          "name": "webgl2-mouse",
+          "status": "passed",
+          "wave": {
+            "x": "0.11631842303806296",
+            "y": "-22.000806835894252",
+            "placements": "0",
+            "contacts": "0",
+            "ticks": "64",
+            "rings": "0",
+            "energy": "952.6620661068833",
+            "curl": "1.7645822092989962",
+            "divergence": "0.9893343885839392",
+            "height": "1.0893264689708302",
+            "result": "2",
+            "cooldown": "0",
+            "paused": "false",
+            "enabled": "true",
+            "vx": "0.5692018742298544",
+            "vy": "-0.003347629211171226",
+            "docking": "0",
+            "crash": "0",
+            "phase": "playing",
+            "course": "1",
+            "courseCount": "3",
+            "complete": "false"
+          },
+          "errors": []
+        },
+        {
+          "name": "webgl2-touch",
+          "status": "passed",
+          "wave": {
+            "x": "0.13489156945687264",
+            "y": "-22.000899134752764",
+            "placements": "0",
+            "contacts": "0",
+            "ticks": "60",
+            "rings": "0",
+            "energy": "945.4221495455816",
+            "curl": "1.8724638461277725",
+            "divergence": "0.8485185055204814",
+            "height": "1.00092722884063",
+            "result": "2",
+            "cooldown": "0",
+            "paused": "false",
+            "enabled": "true",
+            "vx": "0.5990440204535568",
+            "vy": "-0.0034846850064355825",
+            "docking": "0",
+            "crash": "0",
+            "phase": "playing",
+            "course": "1",
+            "courseCount": "3",
+            "complete": "false"
+          },
+          "errors": []
+        }
+      ],
+      "rafDelayMs": {
+        "mouse": 100,
+        "touch": 500
+      },
+      "touchDpr": 1,
+      "args": [
+        "--enable-unsafe-webgpu",
+        "--enable-features=Vulkan",
+        "--use-webgpu-adapter=swiftshader",
+        "--use-angle=swiftshader",
+        "--use-vulkan=swiftshader",
+        "--disable-vulkan-surface",
+        "--enable-unsafe-swiftshader"
+      ],
+      "browserVersion": "140.0.7339.186"
+    },
+    "renderer_cases": [
+      {
+        "name": "webgpu: real ocean pixels, controls, pause, restart",
+        "status": "passed",
+        "pixelVariation": 56.89034691747151
+      },
+      {
+        "name": "webgl2: real ocean pixels, controls, pause, restart",
+        "status": "passed",
+        "pixelVariation": 56.89036104425358
+      },
+      {
+        "name": "WebGPU and WebGL 2 ocean orientation and palette agree",
+        "status": "passed",
+        "meanPixelDifference": 4.899078973153047e-06
+      },
+      {
+        "name": "Auto fallback after missing",
+        "status": "passed",
+        "backend": "webgl2"
+      },
+      {
+        "name": "Auto fallback after adapter",
+        "status": "passed",
+        "backend": "webgl2"
+      },
+      {
+        "name": "Auto fallback after device",
+        "status": "passed",
+        "backend": "webgl2"
+      },
+      {
+        "name": "Auto fallback after surface",
+        "status": "passed",
+        "backend": "webgl2"
+      },
+      {
+        "name": "forced WebGPU fails explicitly without fallback",
+        "status": "passed"
+      },
+      {
+        "name": "both unavailable: readable narrow error and restart",
+        "status": "passed"
+      },
+      {
+        "name": "narrow responsive controls, DPR, iframe",
+        "status": "passed"
+      },
+      {
+        "name": "WebGL 2 loss, restart and repeated resize",
+        "status": "passed",
+        "loseContext": true
+      },
+      {
+        "name": "network failure index.js",
+        "status": "passed"
+      },
+      {
+        "name": "network failure index.wasm",
+        "status": "passed"
+      }
+    ],
+    "course_cases": {
+      "scope": "Final package; complete three-course campaign and replay, WebGL 2 mouse",
+      "cases": [
+        {
+          "name": "webgl2-mouse",
+          "status": "passed",
+          "first_course": "arrived",
+          "rock_course": "arrived",
+          "channel": {
+            "phase": "arrived",
+            "complete": "true"
+          },
+          "replay": {
+            "course": "1",
+            "phase": "playing",
+            "complete": "false",
+            "x": "0",
+            "y": "-22",
+            "placements": "0",
+            "energy": "0",
+            "height": "0"
+          },
+          "errors": []
+        }
+      ],
+      "raf_delay_ms": {
+        "mouse": 50,
+        "touch": 50
+      }
+    },
+    "prior_full_course_matrix": {
+      "scope": "Before the final undisturbed-field sampling/rendering fast path; active simulation and campaign rules unchanged",
+      "package_sha256": "e552f4ff315fa50bb1aad567ef9be8c68c715dbaa32ac83c90564fb2968eb1b2",
+      "cases": [
+        {
+          "name": "webgpu-mouse",
+          "status": "passed",
+          "first_course": "arrived",
+          "rock_course": "arrived",
+          "channel": {
+            "phase": "arrived",
+            "complete": "true"
+          },
+          "replay": {
+            "course": "1",
+            "phase": "playing",
+            "complete": "false",
+            "x": "0",
+            "y": "-22",
+            "placements": "0",
+            "energy": "0",
+            "height": "0"
+          },
+          "errors": []
+        },
+        {
+          "name": "webgpu-touch",
+          "status": "passed",
+          "first_course": "arrived",
+          "rock_course": "arrived",
+          "channel": {
+            "phase": "arrived",
+            "complete": "true"
+          },
+          "replay": {
+            "course": "1",
+            "phase": "playing",
+            "complete": "false",
+            "x": "0",
+            "y": "-22",
+            "placements": "0",
+            "energy": "0",
+            "height": "0"
+          },
+          "errors": []
+        },
+        {
+          "name": "webgl2-mouse",
+          "status": "passed",
+          "first_course": "arrived",
+          "rock_course": "arrived",
+          "channel": {
+            "phase": "arrived",
+            "complete": "true"
+          },
+          "replay": {
+            "course": "1",
+            "phase": "playing",
+            "complete": "false",
+            "x": "0",
+            "y": "-22",
+            "placements": "0",
+            "energy": "0",
+            "height": "0"
+          },
+          "errors": []
+        },
+        {
+          "name": "webgl2-touch",
+          "status": "passed",
+          "first_course": "arrived",
+          "rock_course": "arrived",
+          "channel": {
+            "phase": "arrived",
+            "complete": "true"
+          },
+          "replay": {
+            "course": "1",
+            "phase": "playing",
+            "complete": "false",
+            "x": "0",
+            "y": "-22",
+            "placements": "0",
+            "energy": "0",
+            "height": "0"
+          },
+          "errors": []
+        }
+      ]
+    }
+  },
+  "screenshots": {
+    "ocean-flow-wave.png": "28317a16cf1c2a70baa3162e94a2d71fbc90bd9f643f4472a2f4764283ee6cfc",
+    "ocean-flow-swirl.png": "4d31b91f92a0ff9d17028c62e1786cbbebeff7a205a7de57c59f744f11b7f5c4"
+  },
+  "limits": [
+    "48 x 64 simulation; 16 x 24 eight-bit render snapshot",
+    "Linearized free surface with semi-Lagrangian velocity advection and bounded height",
+    "Analytic tap steering and ambient swells remain",
+    "Hardware frame timing and physical mobile input unverified",
+    "No itch.io upload performed"
+  ],
+  "screenshots_package_sha256": "4dd7dddaab5327c5450ffdcf64db319a744cf9a5cfecb3315f81a023672fa74b"
+}

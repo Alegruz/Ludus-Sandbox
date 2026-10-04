@@ -53,7 +53,7 @@ jobs:
             -o ocean_tests
           ./ocean_tests
           clang++-18 -std=c++23 -Wall -Wextra -Wpedantic -Werror -fno-exceptions -I src \
-            tests/ripple_tests.cpp src/game/ripple_game.cpp src/game/game_render.cpp \
+            tests/ripple_tests.cpp src/game/ripple_game.cpp src/game/water_field.cpp src/game/game_render.cpp \
             src/ocean/ocean_settings.cpp src/ocean/ocean_uniforms.cpp -o ripple_tests
           ./ripple_tests
 
@@ -61,7 +61,7 @@ jobs:
         run: |
           clang-tidy-18 \
             src/ocean/ocean_settings.cpp src/ocean/ocean_clock.cpp src/ocean/ocean_uniforms.cpp \
-            src/game/ripple_game.cpp src/game/game_render.cpp \
+            src/game/ripple_game.cpp src/game/water_field.cpp src/game/game_render.cpp \
             --warnings-as-errors='*' \
             -- -std=c++23 -I src
 

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "game/water_field.h"
 #include "ocean/numeric.h"
 
 namespace ludus::sandbox::game
@@ -13,11 +14,6 @@ using ocean::numeric::usize;
 
 inline constexpr usize kRippleCapacity = 16;
 inline constexpr usize kInputCapacity = 8;
-inline constexpr usize kSurfaceCapacity = 8;
-inline constexpr usize kStrokeCapacity = 64;
-inline constexpr float64 kWaveSpeed = 12.0;
-inline constexpr float64 kWaveLifetime = 3.0;
-inline constexpr float64 kVortexLifetime = 5.0;
 inline constexpr usize kRockCapacity = 16;
 inline constexpr uint32 kCourseCount = 3;
 inline constexpr float64 kTickSeconds = 1.0 / 60.0;
@@ -105,23 +101,6 @@ struct Ripple final
     bool Active = false;
     bool BoatAffected = false;
 };
-enum class SurfaceKind : uint8
-{
-    Wave,
-    Vortex
-};
-struct SurfaceEffect final
-{
-    Point Origin;
-    Point Direction{1.0, 0.0};
-    float64 Radius = 8.0;
-    float64 Strength = 1.0; // Signed for clockwise/counterclockwise vortices.
-    float64 Age = 0.0;
-    float64 PreviousAge = 0.0;
-    SurfaceKind Kind = SurfaceKind::Wave;
-    float64 DecayAge = 0.0; // Vortex energy is refreshed while stirring; phase stays continuous.
-    bool Active = false;
-};
 enum class PlacementResult : uint8
 {
     Ready,
@@ -180,13 +159,12 @@ public:
     [[nodiscard]] PlacementResult BeginStroke(Point world) noexcept;
     [[nodiscard]] PlacementResult MoveStroke(Point world) noexcept;
     [[nodiscard]] PlacementResult EndStroke(Point world) noexcept;
-    // Local transport from the same bounded effects sent to the shader.
+    // Boat and rendering sample the same evolving momentum / height field.
     [[nodiscard]] Point WaterAt(Point world) const noexcept;
-    [[nodiscard]] const SurfaceEffect* GetSurfaceEffects() const noexcept
+    [[nodiscard]] const WaterField& GetWater() const noexcept
     {
-        return mSurface;
+        return mWater;
     }
-    [[nodiscard]] uint32 ActiveSurfaceEffects(SurfaceKind kind) const noexcept;
     void Advance(float64 delta, bool running) noexcept;
     void CancelInput() noexcept;
     void Reset() noexcept;
@@ -232,15 +210,11 @@ public:
 
 private:
     [[nodiscard]] bool LoadCourse(uint32 index) noexcept;
-    [[nodiscard]] SurfaceEffect* StrokeEffect() noexcept;
-    SurfaceEffect mSurface[kSurfaceCapacity];
-    Point mStroke[kStrokeCapacity];
-    usize mStrokeCount = 0;
-    usize mStrokeSlot = kSurfaceCapacity;
-    Point mStrokeDirection;
+    WaterField mWater;
+    Point mStrokeStart;
+    Point mStrokePrevious;
     float64 mStrokeDistance = 0.0;
-    float64 mStrokeTurn = 0.0;
-    float64 mStrokeAbsoluteTurn = 0.0;
+    bool mStrokeFlowing = false;
     bool mStroking = false;
     LevelDefinition mLevel;
     bool mCampaignActive = false;

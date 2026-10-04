@@ -1,13 +1,13 @@
 // Procedural top-down stylized ocean for the "Drift" game jam theme.
 //
-// One fullscreen pass. Analytic surface waves and bounded game-owned currents.
+// One fullscreen pass. Ambient swells over a simulated, advected free surface.
 // Everything is authored from the single uniform block below. Only f32
 // scalar/vector arithmetic, uniform fields, SV_VulkanVertexID, SV_Position and a
 // location-0 RGBA output are used (the engine's validated shader subset; see
 // fullscreen-rendering-handoff.md).
 //
 // The CPU mirror of this layout is src/ocean/ocean_uniforms.h; the two must
-// agree (offsets asserted on the C++ side). set/group 0, binding 0, 1024 bytes.
+// agree (offsets asserted on the C++ side). set/group 0, binding 0, 3840 bytes.
 
 struct OceanUniforms
 {
@@ -69,24 +69,9 @@ struct OceanUniforms
     float4 rock13; // center.xy, radius, reserved
     float4 rock14; // center.xy, radius, reserved
     float4 rock15; // center.xy, radius, reserved
-    float4 surfaceInfo; // active effect count
-    float4 surface0a; // origin.xy, age, signed strength
-    float4 surface0b; // wave direction.xy OR vortex decay age/reserved; radius; kind
-    float4 surface1a;
-    float4 surface1b;
-    float4 surface2a;
-    float4 surface2b;
-    float4 surface3a;
-    float4 surface3b;
-    float4 surface4a;
-    float4 surface4b;
-    float4 surface5a;
-    float4 surface5b;
-    float4 surface6a;
-    float4 surface6b;
-    float4 surface7a;
-    float4 surface7b;
     float4 boatMotion; // velocity.xy, speed, reserved
+    float4 flowInfo; // snapshot dimensions, signed velocity/height ranges
+    float4 flow[192]; // two cells per vec4; momentum/height and foam/material map
 
 };
 
@@ -115,20 +100,50 @@ float4 rippleAt(int index)
     }
 }
 
-// Named vec4 fields keep the validated WebGL std140 reflection subset.
-float4 surfaceAt(int index, bool shape)
+// Decode before interpolation: packed channels are exact 24-bit integers.
+float3 unpackChannels(float packed)
 {
-    switch (index)
-    {
-        case 0: return shape ? ocean.surface0b : ocean.surface0a;
-        case 1: return shape ? ocean.surface1b : ocean.surface1a;
-        case 2: return shape ? ocean.surface2b : ocean.surface2a;
-        case 3: return shape ? ocean.surface3b : ocean.surface3a;
-        case 4: return shape ? ocean.surface4b : ocean.surface4a;
-        case 5: return shape ? ocean.surface5b : ocean.surface5a;
-        case 6: return shape ? ocean.surface6b : ocean.surface6a;
-        default: return shape ? ocean.surface7b : ocean.surface7a;
-    }
+    return float3(fmod(packed, 256.0), fmod(floor(packed / 256.0), 256.0), floor(packed / 65536.0));
+}
+struct FlowSample
+{
+    float2 velocity;
+    float height;
+    float foam;
+    float2 displacement;
+};
+FlowSample flowCell(int2 cell)
+{
+    cell = clamp(cell, int2(0, 0), int2(15, 23));
+    int index = cell.y * 16 + cell.x;
+    float4 packed = ocean.flow[index / 2];
+    float3 momentum = unpackChannels(packed[(index % 2) * 2]);
+    float3 material = unpackChannels(packed[(index % 2) * 2 + 1]);
+    FlowSample result;
+    result.velocity = (momentum.xy - 128.0) / 127.0 * ocean.flowInfo.z;
+    result.height = (momentum.z - 128.0) / 127.0 * ocean.flowInfo.w;
+    result.foam = material.x / 255.0;
+    result.displacement = (material.yz - 128.0) / 127.0 * 12.0;
+    return result;
+}
+FlowSample fieldAt(float2 world)
+{
+    FlowSample result;
+    result.velocity = float2(0.0, 0.0);
+    result.height = 0.0;
+    result.foam = 0.0;
+    result.displacement = float2(0.0, 0.0);
+    if (ocean.gameInfo.x < 0.5 || ocean.flowInfo.z <= 0.0 || any(abs(world) >= ocean.levelBounds.xy)) return result;
+    float2 grid = (world / ocean.levelBounds.xy * 0.5 + 0.5) * ocean.flowInfo.xy - 0.5;
+    int2 cell = int2(floor(grid));
+    float2 f = frac(grid);
+    FlowSample a = flowCell(cell), b = flowCell(cell + int2(1, 0));
+    FlowSample c = flowCell(cell + int2(0, 1)), d = flowCell(cell + int2(1, 1));
+    result.velocity = lerp(lerp(a.velocity, b.velocity, f.x), lerp(c.velocity, d.velocity, f.x), f.y);
+    result.height = lerp(lerp(a.height, b.height, f.x), lerp(c.height, d.height, f.x), f.y);
+    result.foam = lerp(lerp(a.foam, b.foam, f.x), lerp(c.foam, d.foam, f.x), f.y);
+    result.displacement = lerp(lerp(a.displacement, b.displacement, f.x), lerp(c.displacement, d.displacement, f.x), f.y);
+    return result;
 }
 
 float4 rockAt(int index)
@@ -212,61 +227,19 @@ float4 fragmentMain(float4 position : SV_Position) : SV_Target0
     world.x = (position.x - res.x * 0.5) * metersPerPixel;
     world.y = (res.y * 0.5 - position.y) * metersPerPixel; // flip Y
 
-    float2 surfaceWorld = world;
-    float2 interactionSlope = float2(0.0, 0.0);
-    float interactionHeight = 0.0;
-    float interactionFoam = 0.0;
+    FlowSample flow = fieldAt(world);
+    float2 surfaceWorld = world - flow.displacement;
+    float2 cellSize = ocean.levelBounds.xy * 2.0 / max(ocean.flowInfo.xy, float2(1.0, 1.0));
+    float2 difference = max(cellSize * 0.5, float2(0.1, 0.1));
+    float2 interactionSlope = float2(
+        fieldAt(world + float2(difference.x, 0.0)).height - fieldAt(world - float2(difference.x, 0.0)).height,
+        fieldAt(world + float2(0.0, difference.y)).height - fieldAt(world - float2(0.0, difference.y)).height) / (difference * 2.0);
+    float interactionHeight = flow.height;
+    // Foam is produced by compression, transported and dissipated in the solver.
+    // The material map also bends the fine ripples; no authored spiral geometry.
+    float interactionFoam = smoothstep(0.015, 0.28, flow.foam) *
+                            (0.45 + 0.55 * valueNoise(surfaceWorld * 1.5));
     float pixelWidth = max(metersPerPixel, 0.035);
-    // These definitions share speed, footprint, age and damping with WaterAt.
-    // Waves move in the swipe direction; vortices rotate in the drawn direction.
-    for (int i = 0; i < 8; ++i)
-    {
-        if (float(i) >= ocean.surfaceInfo.x) break;
-        float4 effect = surfaceAt(i, false);
-        float4 shape = surfaceAt(i, true);
-        float2 relative = world - effect.xy;
-        float radius = max(shape.z, 1.0);
-        if (shape.w > 1.5)
-        {
-            float distance = length(relative);
-            float envelope = max(1.0 - dot(relative, relative) / (radius * radius), 0.0);
-            float fade = pow(max(1.0 - shape.x / 5.0, 0.0), 2.0);
-            float weight = abs(effect.w) * fade * envelope * envelope;
-            float angle = -effect.w * effect.z * 1.6 * fade * envelope * envelope;
-            float ca = cos(angle), sa = sin(angle);
-            surfaceWorld += float2(relative.x * ca - relative.y * sa,
-                                   relative.x * sa + relative.y * ca) - relative;
-            interactionHeight -= weight * 1.6;
-            interactionSlope += relative * (6.4 * abs(effect.w) * fade * envelope / (radius * radius));
-            float spiral = sin(atan2(relative.y, relative.x) * 3.0 +
-                               log(max(distance / radius, 0.08)) * 10.0 - effect.z * effect.w * 3.0);
-            float line = smoothstep(0.75, 0.98, spiral);
-            float broken = 0.55 + 0.45 * valueNoise(relative * 0.5);
-            interactionFoam += line * weight * broken * smoothstep(0.5, 2.0, distance) * 0.8;
-        }
-        else
-        {
-            float along = dot(relative, shape.xy);
-            float across = dot(relative, float2(-shape.y, shape.x));
-            float front = (along - effect.z * 12.0) / 2.0;
-            float envelope = max(1.0 - across * across / (radius * radius), 0.0);
-            float fade = pow(max(1.0 - effect.z / 3.0, 0.0), 2.0);
-            float weight = effect.w * fade * envelope * envelope;
-            float crest = max(1.0 - front * front, 0.0);
-            interactionHeight += crest * crest * weight * 1.5;
-            if (abs(front) < 1.0)
-            {
-                interactionSlope -= shape.xy * (3.0 * front * crest * weight);
-            }
-            // A broad whitecap travels with the physical crest, then leaves
-            // smaller broken foam behind it instead of a cursor-shaped mark.
-            float whitecap = 1.0 - smoothstep(0.18, 0.45 + pixelWidth, abs(front));
-            float trailing = (1.0 - smoothstep(0.0, 4.0, abs(front + 1.5))) *
-                             smoothstep(0.1, 0.8, -front) * 0.15;
-            float breakup = 0.6 + 0.4 * valueNoise(relative * 0.45);
-            interactionFoam += (whitecap + trailing) * weight * breakup;
-        }
-    }
     for (int i = 0; i < 16; ++i)
     {
         if (float(i) >= ocean.gameInfo.y) break;
@@ -310,7 +283,7 @@ float4 fragmentMain(float4 position : SV_Position) : SV_Target0
     float3 normal = normalize(float3(-slope, 1.0));
     float diffuse = dot(normal, normalize(float3(-0.4, 0.5, 0.85)));
     float reflection = pow(max(dot(normal, normalize(float3(0.25, 0.35, 1.0))), 0.0), 24.0);
-    float level = clamp(patches + waveShade * 0.5 + interactionHeight * 0.08, 0.0, 1.0);
+    float level = clamp(patches + waveShade * 0.5 + interactionHeight * 0.20, 0.0, 1.0);
 
     // Palette: deep navy -> ocean blue -> teal, as broad bands. A touch of
     // contrast curve keeps the illustrated, posterized-but-smooth look.
@@ -407,7 +380,8 @@ float4 fragmentMain(float4 position : SV_Position) : SV_Target0
         float wakeBreak = 0.55 + 0.45 * sin(behind * 2.0 - t * 4.0);
         float wake = wakeLine * wakeEnvelope * wakeBreak * min(speed / 2.5, 0.8);
         color = lerp(color, ocean.foamColor.rgb, wake);
-        boat.y += sin(dot(ocean.boatInfo.xy, dirA) * k - t * 1.7) * ocean.waveIntensity * 0.15;
+        boat.y += fieldAt(ocean.boatInfo.xy).height * 0.2 +
+                  sin(dot(ocean.boatInfo.xy, dirA) * k - t * 1.7) * ocean.waveIntensity * 0.15;
         float hullDistance = length(boat / float2(radius, radius * 0.62));
         float hull = 1.0 - smoothstep(0.94, 1.02, hullDistance);
         float shadow = 1.0 - smoothstep(0.9, 1.2, length((boat + float2(0.15, 0.20)) / float2(radius, radius * 0.62)));

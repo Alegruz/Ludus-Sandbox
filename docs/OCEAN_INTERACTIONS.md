@@ -1,124 +1,116 @@
-# Ocean interaction update
+# Ocean flow field
 
-The water now responds to the shape of a gesture. Taps produce radial ripples,
-straight swipes produce traveling wave crests, and circular strokes produce
-clockwise or counterclockwise currents. The wave/current records also supply
-the boat's local water velocity, so visible motion and steering agree.
+Dragging adds momentum to a shared velocity field. Surface height responds to
+its divergence, and the height gradient accelerates the water back. A curved
+stroke deposits tangential momentum along its actual path, so circulation
+emerges without classifying a circle, fitting a center or spawning a vortex.
+Strokes combine with the water already there; opposite strokes can cancel it.
+Boat drag samples this same field.
 
-![A traveling swipe wave](screenshots/ocean-wave.png)
-![A circular stroke produces a swirl](screenshots/ocean-swirl.png)
+![A released swipe drives a surface wave](screenshots/ocean-flow-wave.png)
+![Stirring advects the water pattern and carries the boat](screenshots/ocean-flow-swirl.png)
 
-## Interaction and simulation
+## Simulation
 
-One primary pointer owns a captured stroke. Positions are mapped from the
-current canvas CSS rectangle to the fitted world camera; DPR does not change
-gesture geometry. A tap commits on release. Movement shorter than 0.4 m is
-ignored as jitter, and a path shorter than 2.5 m remains a tap.
+`WaterField` owns a 48 × 64 staggered grid: horizontal/vertical velocities on
+cell faces and height, foam and material displacement at cell centers. It uses
+one roughly 300 KB allocation, reports allocation failure through `Ready()` and
+rejects forcing when unavailable. There are no allocations during gestures,
+stepping, sampling or reset. Copying is disabled; course transitions reuse the
+field storage, avoiding large temporaries on the 64 KB browser stack.
 
-A drag creates one bounded surface effect. Turning more than 1.5 radians with
-at least six samples and a consistent rotation converts that effect to a vortex
-instead of emitting extra rings. Three spaced samples estimate its center;
-nearly collinear or out-of-water circle fits are rejected. Alternating zigzags
-do not count as circular motion. History holds at most 64 samples and the pool
-holds eight effects; neither allocates per event or frame.
+Each segment integrates a compact 4 m momentum brush with at most 0.4 m spacing
+and distance-weighted force. The force does not depend on the number of pointer
+events. Sampling only faces in the brush support bounds the work. The existing
+0.4 m jitter filter and 2.5 m tap threshold remain. There is no effect pool,
+shape recognition, authored spiral or per-stroke expiration timer.
 
-| Effect | Behavior |
-| --- | --- |
-| Tap ripple | Existing 20 m/s expanding ring; one swept contact impulse per hull, 1.5 s lifetime and 0.25 s tap cooldown |
-| Swipe wave | Crest travels at 12 m/s in the stroke direction; compact 2 m half-width pulse transports the hull through water drag; 3 s lifetime |
-| Circular current | Tangential velocity has the gesture's signed rotation and a smooth bounded radial footprint; stirring replenishes energy without restarting phase; fades over 5 s after motion stops |
+At 60 Hz, substeps perform:
 
-Strength and width grow with stroke length; vortex strength grows with coherent
-turning. Boat drag and speed limits still come from `PhysicsSettings`.
-Ambient animation settings remain cosmetic and never become transport velocity.
-Strokes reject rock positions and use the loaded level bounds. Crash and
-arrival reject further input and freeze effects at the same clipped tick time
-as the boat. The surface effects age on the existing 60 Hz simulation ticks. Pause, hidden
-state, focus loss and tuning mode freeze the world; reset clears it. Restart
-preserves effects and the boat. Cancellation discards an unfinished tap and
-stops further stirring; already emitted water motion dissipates naturally.
+1. Semi-Lagrangian self-advection of face velocities with midpoint backtracing.
+2. Gravity acceleration `du/dt = -g gradient(h)` and velocity damping.
+3. Height update `dh/dt = -H divergence(u)` using paired face fluxes.
+4. Transport of material displacement and foam, with foam production from
+   compression and gradual dissipation.
 
-The DOM tracks pointer identity, cancellation, capture loss, blur, visibility,
-resize and canvas replacement. Secondary fingers cannot move or release the
-primary stroke. Controls cancel strokes and own their input.
+`g = 9.8`, `H = 2`, and the substep bound uses wave speed `sqrt(g H)`, a 10 m/s
+component speed cap and minimum cell spacing. This is a game-oriented,
+linearized free-surface model with advected momentum, rather than full nonlinear
+shallow-water or deep-ocean simulation. Height is bounded to ±3 m for extreme
+forcing, so clipping can change integrated height in those extreme cases.
+Ordinary unsaturated closed-domain waves conserve integrated height. The
+material map relaxes slowly and is bounded to ±12 m. Semi-Lagrangian numerical
+diffusion and damping dissipate circulation without a hard expiry.
 
-## Appearance and rendering contract
+The formulation follows the height/divergence and pressure coupling described
+in [Robert Bridson's shallow-water lecture](https://www.cs.ubc.ca/~rbridson/courses/533d-fall-2005/nov17-cs533d-slides.pdf).
+Grid self-advection and material transport use the Eulerian approach discussed
+in [GPU Gems chapter 38](https://developer.nvidia.com/gpugems/gpugems/part-vi-beyond-triangles/chapter-38-fast-fluid-dynamics-simulation-gpu).
+Unlike an incompressible projection, the free-surface update keeps divergence
+available to generate waves.
 
-The single Slang shader adds crossing swells, curved crest ridges, shorter wind
-ripples, surface-normal lighting and sparse broken whitecaps. Gesture waves
-raise and shade a moving crest; vortices deform the sampled water, darken the
-center and rotate spiral foam. Tap rings now shade a surface disturbance rather
-than only painting an outline. Boat motion produces a trailing wake and subtle
-cosmetic bobbing. Ambient height derivatives follow the continuous analytic
-wave approach described in [GPU Gems chapter 1](https://developer.nvidia.com/gpugems/gpugems/part-i-natural-effects/chapter-1-effective-water-simulation-physical-models).
+Rock cells and the rectangular water boundary close normal velocity faces.
+Height waves reflect from them; backtracing rejects solid-crossing samples.
+Input rejects rock crossings even when a fast stroke has only down/up events.
+Rock geometry is rasterized at simulation resolution. Pause and terminal states
+freeze the field. The terminal tick advances it only to the boat's collision
+time. Cancel stops further forcing while existing water keeps moving; reset
+clears the field, and graphics restart preserves it.
 
-These are bounded analytic effects, not a grid-based free-surface fluid solver.
-No engine water API, textures, compute passes, GPU readback or handwritten
-backend shader is introduced. SPIR-V, WGSL and GLSL ES come from one source.
+The three-course rescue game and its tap ripple steering remain intact. Taps
+retain their existing analytic radial impulse and rendering. Ambient wind
+swells and boat wakes also remain cosmetic. The new field replaces the scripted
+swipe-wave and vortex effects specifically.
 
-The upload block is 1024 bytes. Existing fields through the sixteen ripple
-records and the rescue-level records retain their offsets. Surface metadata
-starts at 736, eight pairs of vec4 effect records at 752, and boat
-velocity/speed at 1008. The first vec4 holds
-origin, phase age and signed strength. The second holds wave direction or vortex
-decay age, radius and kind. Individually named shader fields match contiguous
-CPU storage. C++ layout assertions, shader reflection, SPIR-V validation and the
-packager enforce the contract on all generated targets.
+## Rendering contract
 
-## Reproduce validation
+The installed renderer has no public texture/compute API. The application
+samples the field into a 16 × 24 grid in its uniform block, leaving engine APIs
+and the pinned SDK unchanged. Each sample contains velocity.xy, height, foam
+and material displacement.xy. Two floats store six eight-bit channels as
+exactly representable 24-bit integers. Zero signed channels use byte 128;
+velocity, height and displacement ranges are ±10, ±3 and ±12 respectively.
+The shader decodes before bilinear interpolation. An undisturbed field uses a
+zero velocity range as an idle marker, skipping all grid lookups per pixel.
 
-Use the selectable presets generated by setup and the pinned Ludus revision
+The 3840-byte std140 block keeps the existing fields through offset 735. Boat
+motion starts at 736, field metadata at 752 and 192 vec4 samples at 768. C++
+assertions, SPIR-V/WGSL/GLSL ES reflection and the packager enforce that layout.
+Quantization and the coarser render grid smooth fine details; the boat samples
+the full simulation grid. Normals and coloration use sampled height. The
+water pattern and foam breakup use the advected material map; foam comes from
+the transported solver state, with contrast remapped for visibility. There is
+no gesture-shaped rendering overlay for swipes or swirls.
+
+## Validation
+
+Use the selectable presets generated by setup and SDK revision
 `9554d051b2125580327d9f89c06395798a53028d` from `config/ludus-version.txt`.
-Local setup was repaired because old browser presets referenced stale tool paths
-and an older SDK without the existing dynamics API. Prepared tools were reused;
-the browser SDK was rebuilt from the pinned source without changing engine code.
-Keep SDK/tool paths in ignored local presets.
+Machine paths remain in ignored local presets.
 
 ```bash
 cmake --build --preset linux-clang-development
-ctest --preset linux-clang-development
+ctest --preset linux-clang-development --output-on-failure
 cmake --build --preset web-emscripten-release
-./scripts/package-web                 # --ludus-source <prepared-tool-checkout> for local overrides
+./scripts/package-web
 python3 -m zipfile -e out/packages/drift-ocean-web-release.zip out/browser-qa/extracted
-cd tools/browser-tests
-npm ci
-npm test
-npm run test:game -- ../../out/browser-qa/extracted ../../out/browser-qa/ripple-results
-npm run test:gestures -- ../../out/browser-qa/extracted ../../out/browser-qa/gesture-results
+node tools/browser-tests/run.mjs out/browser-qa/extracted out/packages/drift-ocean-web-release.zip out/browser-qa/renderers
+node tools/browser-tests/ripple.mjs out/browser-qa/extracted out/browser-qa/courses
+node tools/browser-tests/gestures.mjs out/browser-qa/extracted out/browser-qa/gestures
 ```
 
-The gesture harness uses test-only RAF delays (100 ms for mouse and 500 ms for
-touch) to bound software-GPU work. Gesture and course touch cases default to
-DPR 1; renderer cases separately cover DPR 2. The course harness uses 50 ms
-RAF delays for long navigation.
-Actual screenshots are required for visual acceptance; the old offline CPU
-preview predates these shading and interaction changes. Physical mobile input,
-hardware frame timing and the hosted itch.io upload require separate acceptance.
+The logic tests cover circulation sign and persistence, divergence creating
+height, propagation beyond the brush, material advection, boat transport,
+cancellation of opposite strokes, dense/sparse event equivalence, integrated
+height conservation, solid boundaries, small-domain stability, invalid input,
+terminal clipping and campaign reset. Browser checks use actual mouse/emulated
+touch strokes, read-only field diagnostics, signed circulation and material
+transport after release, screenshots, exact pause freezing and graphics restart.
+The DOM exposes field energy, peak curl/divergence and height as QA data, without
+adding technical controls to gameplay.
 
-## Local evidence
-
-Native Development and browser Development/Release builds pass with warnings
-as errors. All three CTest targets pass, including the standalone and real-SDK
-versions of 530 gameplay checks. Coverage includes the rescue course and new
-rock-origin, custom-boundary, terminal-freeze and gesture-reset regressions.
-The same standalone checks pass ASan/UBSan; 25 Python setup/bootstrap/release
-tests pass. Pinned Clang 18 formatting and tidy pass, and SPIR-V/WGSL/GLSL
-reflection agrees on the 1024-byte layout.
-
-Browser evidence for the integrated rescue level is recorded under
-`out/ocean-feedback/integrated-gestures`, `pr-ripple` and `pr-ocean`. These checks use Chromium 140.0.7339.186, software rendering
-and emulated touch. The four gesture cases passed on the integrated build before a rock-rejection
-HUD feedback fix (`58755aa73c2d014e967c34e8de6ac2a90fd17d666395ecf3ef3cf02bd8f3b7a6`).
-The final package includes that fix and its additional logic assertions.
-Gesture and course touch cases use DPR 1; renderer cases include DPR 2. Hardware frame rates and physical mobile input remain unverified.
-
-Earlier open-water gesture tests passed with WebGPU touch at DPR 2 and WebGL
-at DPR 1. High-resolution WebGL captures timed out while other software-GPU jobs
-were active. Those original attempts remain under `out/ocean-feedback`; they
-are historical evidence and do not validate the integrated rescue-level build.
-
-Tested ZIP SHA-256:
-`2d22566f50efbf47d08a74e2481746d6d2008dd1288509ef4c02ab5cdc86b324`.
-Its `build-info.json` records the actual pinned SDK revision and payload hashes.
-The ZIP is `out/packages/drift-ocean-web-release.zip`; this update does not
-upload or publish it.
+Local results and the exact tested package hash are in
+[OCEAN_FLOW_VALIDATION.json](OCEAN_FLOW_VALIDATION.json). Browser tests use pinned
+Chromium 140.0.7339.186 with SwiftShader and test-only RAF delays. They establish
+software-rendered behavior, not physical mobile input, hardware frame timing or
+hosted itch.io publication.

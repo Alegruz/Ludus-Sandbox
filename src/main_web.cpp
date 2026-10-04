@@ -35,6 +35,19 @@ namespace
 {
 namespace ocean = ludus::sandbox::ocean;
 
+enum class WaterChannel : uint32
+{
+    VelocityX,
+    VelocityY,
+    Height,
+    Foam,
+    DisplacementX,
+    DisplacementY,
+    Curl,
+    Divergence,
+    Invalid = 0xffffffffU // Preserve a uint32 C ABI and reject unknown channels.
+};
+
 // The store is the single bridge object; the scene borrows it.
 ocean::SettingsStore gStore;
 ludus::sandbox::OceanScene gScene(gStore);
@@ -85,21 +98,21 @@ EM_JS(void, PublishSettings, (const char* json), {
     if (globalThis.__oceanOnSettings) globalThis.__oceanOnSettings(text);
 });
 EM_JS(void, PresentGame, (float64 x, float64 y, uint32 placements, uint32 contacts, uint32 ticks,
-                         uint32 rings, uint32 waves, uint32 vortices, uint32 result, float64 cooldown, int paused, int enabled,
+                         uint32 rings, float64 energy, float64 curl, float64 divergence, float64 height, uint32 result, float64 cooldown, int paused, int enabled,
                          uint32 phase, uint32 crash, float64 vx, float64 vy, float64 docking,
                          uint32 course, uint32 courseCount, int32 complete, const char* title, const char* instruction), {
     const hud = document.getElementById('game-status');
     if (!hud) return;
-    Object.assign(hud.dataset, {x, y, placements, contacts, ticks, rings, waves, vortices, result, cooldown,
+    Object.assign(hud.dataset, {x, y, placements, contacts, ticks, rings, energy, curl, divergence, height, result, cooldown,
                                paused: String(!!paused), enabled: String(!!enabled), vx, vy, docking, crash,
                                phase: ['playing', 'crashed', 'arrived'][phase], course, courseCount, complete: String(!!complete)});
     const heading = document.getElementById('course-title');
     const headingText = 'Course ' + course + ' / ' + courseCount + ' \u2014 ' + UTF8ToString(title);
     if (heading.textContent !== headingText) heading.textContent = headingText;
     const instructions = document.getElementById('game-instructions');
-    const instructionText = UTF8ToString(instruction) + ' Swipe for waves; circle for swirls.';
+    const instructionText = UTF8ToString(instruction) + ' Drag the water to build a current; stir to turn it.';
     if (instructions.textContent !== instructionText) instructions.textContent = instructionText;
-    const feedback = ['Tap for ripples. Swipe for waves. Circle for swirls.', 'Ripple queued.', 'Ripple sent.',
+    const feedback = ['Tap for ripples. Drag to move the water. Stir to turn it.', 'Ripple queued.', 'Ripple sent.',
                       'Ripple recharging...', 'Too many ripples. Wait a moment.',
                       'Tap clear water, away from rocks.', 'Resume to place a ripple.'];
     const message = !enabled ? 'Ocean tuning mode.' : phase === 1 ?
@@ -107,7 +120,7 @@ EM_JS(void, PresentGame, (float64 x, float64 y, uint32 placements, uint32 contac
                     phase === 2 ? (complete ? 'All three courses complete! Play again to start a new run.' :
                     'Boat rescued! Continue to the next level.') : paused ? 'Paused.' :
                     docking > 0 ? 'Mooring… Keep the boat slow inside the green dock.' :
-                    vortices > 0 ? 'Swirling current.' : waves > 0 ? 'Wave rolling through.' :
+                    energy > 1 ? 'Water is moving. Guide the boat with the current.' :
                     cooldown > 0 ? 'Ripple recharging...' : feedback[result] || feedback[0];
     if (hud.textContent !== message) hud.textContent = message;
     const button = document.getElementById('game-pause');
@@ -149,14 +162,17 @@ void Frame() noexcept
     PresentSceneState();
     const auto& game = gScene.GetGame();
     const auto& boat = game.GetBoat();
+    const auto water = game.GetWater().Diagnostics();
     PresentGame(boat.Position.X,
                 boat.Position.Y,
                 static_cast<uint32>(game.Placements()),
                 static_cast<uint32>(game.Contacts()),
                 static_cast<uint32>(game.Ticks()),
                 game.ActiveRipples(),
-                game.ActiveSurfaceEffects(ludus::sandbox::game::SurfaceKind::Wave),
-                game.ActiveSurfaceEffects(ludus::sandbox::game::SurfaceKind::Vortex),
+                water.Energy,
+                water.MaxCurl,
+                water.MaxDivergence,
+                water.MaxHeight,
                 static_cast<uint32>(game.LastPlacement()),
                 game.CooldownFraction(),
                 gScene.IsPaused() ? 1 : 0,
@@ -209,6 +225,33 @@ EMSCRIPTEN_KEEPALIVE void OceanResetSimulation() noexcept
 EMSCRIPTEN_KEEPALIVE int DriftPlace(float64 x, float64 y) noexcept
 {
     return static_cast<int>(gScene.PlaceRipple(x, y));
+}
+// Read-only diagnostics for browser QA. Coordinates are world meters; channels
+// 0..7 are velocity.xy, height, foam, material displacement.xy, curl, divergence.
+EMSCRIPTEN_KEEPALIVE float64 DriftWaterSample(float64 x, float64 y, WaterChannel channel) noexcept
+{
+    const auto water = gScene.GetGame().GetWater().Sample({x, y});
+    switch (channel)
+    {
+        case WaterChannel::VelocityX:
+            return water.VelocityX;
+        case WaterChannel::VelocityY:
+            return water.VelocityY;
+        case WaterChannel::Height:
+            return water.Height;
+        case WaterChannel::Foam:
+            return water.Foam;
+        case WaterChannel::DisplacementX:
+            return water.DisplacementX;
+        case WaterChannel::DisplacementY:
+            return water.DisplacementY;
+        case WaterChannel::Curl:
+            return water.Curl;
+        case WaterChannel::Divergence:
+            return water.Divergence;
+        default:
+            return 0.0;
+    }
 }
 EMSCRIPTEN_KEEPALIVE int DriftStroke(float64 x, float64 y, uint32 phase) noexcept
 {

@@ -75,7 +75,7 @@ try {
       };
       const reset = async () => {
         await page.evaluate(() => { Module._OceanResetSimulation(); Module._OceanSetPaused(0); });
-        await until(() => state(page), s => Number(s.waves) === 0 && Number(s.vortices) === 0 && Number(s.placements) === 0, 'reset');
+        await until(() => state(page), s => Number(s.energy) === 0 && Number(s.placements) === 0, 'reset');
       };
       await page.evaluate(() => Module._OceanSetPaused(1));
       await delay(150);
@@ -87,13 +87,12 @@ try {
         await pointer(1, {x: start.x + (end.x - start.x) * i / 16, y: start.y});
       }
       await pointer(2, end);
-      await until(() => state(page), s => Number(s.waves) === 1, 'directional wave');
+      await until(() => state(page), s => Number(s.energy) > 10 && Number(s.height) > 0.01, 'momentum produces a height wave');
       assert.equal(Number((await state(page)).placements), 0, 'Swipe also emitted a tap ripple');
-      // Capture the traveling crest before waiting for it to transport the hull.
-      await page.screenshot({path: resolve(output, name + '-wave.png')});
       await until(() => state(page), s => Number(s.x) > 0.1, 'wave transports boat in swipe direction');
       const wave = await state(page);
-      assert(Math.abs(Number(wave.y) + 22) < 0.001, 'Horizontal swipe has vertical force');
+      await page.screenshot({path: resolve(output, name + '-wave.png')});
+      assert(Math.abs(Number(wave.y) + 22) < 0.08, 'Horizontal swipe has vertical force');
       await reset();
       // World counterclockwise appears counterclockwise on the rendered ocean.
       for (const sign of [1, -1]) {
@@ -104,9 +103,25 @@ try {
           await pointer(1, screen(-6 + Math.cos(angle) * 6, -22 + Math.sin(angle) * 6));
         }
         await pointer(2, initial);
-        await until(() => state(page), s => Number(s.vortices) === 1 && Number(s.waves) === 0, 'circle becomes vortex');
+        await until(() => state(page), s => Number(s.curl) > 0.2 && Number(s.energy) > 10, 'stirring produces vorticity');
+        const circulation = await page.evaluate(() => {
+          let sum = 0;
+          for (let i = 0; i < 64; ++i) {
+            const angle = (i + 0.5) * Math.PI * 2 / 64;
+            const x = -6 + Math.cos(angle) * 6, y = -22 + Math.sin(angle) * 6;
+            sum += (-Module._DriftWaterSample(x, y, 0) * Math.sin(angle) +
+                     Module._DriftWaterSample(x, y, 1) * Math.cos(angle)) * 6 * Math.PI * 2 / 64;
+          }
+          return sum;
+        });
+        assert(circulation * sign > 10, 'Circulation disagrees with the drawn direction');
         await until(() => state(page), s => (Number(s.y) + 22) * sign > 0.08, 'vortex rotation reaches boat');
         assert.equal(Number((await state(page)).placements), 0, 'Circle emitted a tap ripple');
+        const firstMaterial = await page.evaluate(() => Module._DriftWaterSample(0, -22, 5));
+        const moving = await state(page);
+        await until(() => state(page), s => Number(s.ticks) >= Number(moving.ticks) + 24, 'released field evolves');
+        const laterMaterial = await page.evaluate(() => Module._DriftWaterSample(0, -22, 5));
+        assert((laterMaterial - firstMaterial) * sign > 0.05, 'Water pattern does not advect after release');
         await page.evaluate(() => Module._OceanSetPaused(1));
         await until(() => state(page), s => s.paused === 'true', 'freeze vortex');
         await delay(150);
@@ -120,7 +135,7 @@ try {
           await page.evaluate(() => Module._OceanRestart());
           await until(() => page.locator('#status').getAttribute('data-state'), s => s === 'playing', 'restart with vortex');
           await until(() => page.locator('#status').getAttribute('data-frames'), n => Number(n) > 2, 'restart pixels');
-          assert.equal((await state(page)).vortices, frozen.vortices, 'Restart loses current');
+          assert.equal((await state(page)).energy, frozen.energy, 'Restart loses field state');
           assert.equal((await state(page)).ticks, frozen.ticks, 'Restart advances paused current');
         }
         await reset();
@@ -138,7 +153,7 @@ try {
       });
       await delay(250);
       assert.equal(Number((await state(page)).placements), 0, 'Cancelled pointer emitted a tap');
-      assert.equal(Number((await state(page)).waves), 0, 'Cancelled pointer emitted a wave');
+      assert.equal(Number((await state(page)).energy), 0, 'Cancelled pointer injected momentum');
       assert.equal(errors.length, 0, errors.join('\n'));
       report.cases.push({name, status: 'passed', wave, errors});
       console.log(name + ': passed');
