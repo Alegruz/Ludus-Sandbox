@@ -1,0 +1,109 @@
+{
+  "milestone": "M3: three-course rescue game",
+  "recorded_on": "2026-10-03",
+  "engine_sdk_revision": "9554d051b2125580327d9f89c06395798a53028d",
+  "sandbox_base_revision": "0b4df71de99cfecc965f77269d27cd0421385946",
+  "production_source_sha256": {
+    "src/game/ripple_game.h": "a7565f56c4a99173f3552bdcde061af9006e931f5a4d9ac6db4b1769deb860a3",
+    "src/game/ripple_game.cpp": "a6d6e661eeed8dede9068441383b84c0c077ca858335456100a5fd57a3fa73c5",
+    "src/ocean/ocean_scene.h": "c04ef602d9848c4c1ac21b87ba10b1c9d88c0e39069b38a8db91f6cfb0323cd5",
+    "src/main_web.cpp": "1bb0372400cff817f5bffae4f70ff219a270950d44c0f3423f8e488d3c02929c",
+    "web/shell.html": "330338a188f447f2e674de14c78abf9183cf3c60cadb1106d346375b364a1a50",
+    "shaders/ocean.slang": "061c639a60d8cfe3ea3aad61689ed103add9ae58deb8ce7f5cc1814c9955a726"
+  },
+  "package": {
+    "path": "out/packages/drift-ocean-web-release.zip",
+    "sha256": "66c7e9a54849e0852f5fc3aeead2570c53f7cb9daabbed559bbc96c2051c25c6",
+    "extracted_payload": "out/browser-qa/m3-accepted-extracted",
+    "runtime_sha256": {
+      "index.html": "330338a188f447f2e674de14c78abf9183cf3c60cadb1106d346375b364a1a50",
+      "index.js": "845907f7619398f0d85bebb35613eda465dcd69edd4dc75f8371bd08accab538",
+      "index.wasm": "700f1657873817904d4a1082643e97b703e01e19acc1d5be4c88ff48d8aee6ef"
+    },
+    "uniform_bytes": {
+      "fragment": 1024,
+      "glsl_es": 1024,
+      "vertex": 1024,
+      "wgsl": 1024
+    }
+  },
+  "setup": {
+    "status": "passed",
+    "cmake": "3.29.6",
+    "selectable_configure_and_build_presets": [
+      "ludus-local-linux-clang-development",
+      "ludus-local-web-emscripten-development",
+      "ludus-local-web-emscripten-release"
+    ],
+    "selectable_test_presets": [
+      "ludus-local-linux-clang-development"
+    ],
+    "checks": [
+      "Selected CMake --list-presets=configure, build and test",
+      "Shared read-only ludus project check: SDK/dependency prefixes, toolchain, shader tools, Ninja and IDE preset mode",
+      "Real configure/build for native Development and browser Development/Release; native CTest"
+    ]
+  },
+  "logic": {
+    "status": "passed",
+    "native_ctest_targets": 3,
+    "independent_gameplay_checks": 584,
+    "sdk_gameplay_checks": 584,
+    "bootstrap_setup_release_python_tests": 25,
+    "asan_ubsan": "584 checks passed with leak detection enabled",
+    "campaign_regressions": [
+      "Sail all three authored routes with placements and real docking rules",
+      "Guarded Next, same-course Retry, completion and replay",
+      "Transactional invalid lookups/custom levels, default tuning on Next, clearing effects and input debt",
+      "Shader snapshot matches active course and clears old rocks on replay"
+    ]
+  },
+  "static_analysis": {
+    "status": "passed",
+    "tools": "Pinned clang-format/clang-tidy 18",
+    "coverage": [
+      "All tracked C++ formatting",
+      "Independent simulation and native SDK compilation database",
+      "Browser bridge with wasm target/sysroot and SDK includes; driver-only --use-port removed for analysis"
+    ]
+  },
+  "browser": {
+    "evidence": "Read the generated reports and PR checks for pass/fail results; CI uploads evidence for the exact extracted Release ZIP.",
+    "browser_version": "140.0.7339.186",
+    "gpu": "SwiftShader software GPU",
+    "touch": "Emulated touch; physical devices unverified",
+    "game_raf_delay_ms": 50,
+    "ocean_raf_delay_ms": 100,
+    "expected_game_cases": [
+      "webgpu-mouse",
+      "webgpu-touch",
+      "webgl2-mouse",
+      "webgl2-touch"
+    ],
+    "expected_ocean_cases": 13,
+    "expected_gesture_cases": 4,
+    "reports": [
+      "out/browser-qa/m3-accepted-game-results/report.json",
+      "out/browser-qa/m3-accepted-ocean-results/report.json",
+      "out/browser-qa/m3-accepted-gesture-results/report.json"
+    ],
+    "commands": [
+      "node tools/browser-tests/ripple.mjs out/browser-qa/m3-accepted-extracted out/browser-qa/m3-accepted-game-results",
+      "node tools/browser-tests/run.mjs out/browser-qa/m3-accepted-extracted out/packages/drift-ocean-web-release.zip out/browser-qa/m3-accepted-ocean-results",
+      "node tools/browser-tests/gestures.mjs out/browser-qa/m3-accepted-extracted out/browser-qa/m3-accepted-gesture-results"
+    ],
+    "coverage": [
+      "All courses earned with actual pointer placements, Next from pause, rapid-click guard, final replay",
+      "Crash/Retry, terminal freeze, focus, cancellation, resize and graphics restart",
+      "Portrait/landscape screenshots and full-dock/HUD separation",
+      "Ocean controls, fallback, failures, DPR and iframe; waves and signed vortices"
+    ]
+  },
+  "remaining_acceptance": [
+    "Physical mobile/touch trial",
+    "Fresh-player steering trial",
+    "Measured CPU simulation and hardware frame timing",
+    "Interactive native pointer controls",
+    "Hosted deployment"
+  ]
+}

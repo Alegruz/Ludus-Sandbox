@@ -72,6 +72,73 @@ LevelDefinition RescueLevel() noexcept
     return level;
 }
 
+bool TryGetCourseLevel(uint32 index, LevelDefinition& output) noexcept
+{
+    if (index >= kCourseCount)
+    {
+        return false;
+    }
+    auto level = RescueLevel();
+    level.Id = index + 1;
+    if (index == 0)
+    {
+        level.RockCount = 0;
+        level.DockCenter = {8.0, 10.0};
+    }
+    else if (index == 2)
+    {
+        level.Spawn = {0.0, -28.0};
+        level.RockCount = 3;
+        level.Rocks[0] = {.Center = {-6.0, -12.0}, .Radius = 5.0, .Id = 1};
+        level.Rocks[1] = {.Center = {6.0, 7.0}, .Radius = 5.0, .Id = 2};
+        level.Rocks[2] = {.Center = {-6.0, 24.0}, .Radius = 4.0, .Id = 3};
+        level.DockCenter = {10.0, 29.0};
+    }
+    output = level;
+    return true;
+}
+
+const char* CourseTitle(uint32 index) noexcept
+{
+    constexpr const char* titles[kCourseCount] = {"First Ripples", "Around the Rock", "The Channel"};
+    return index < kCourseCount ? titles[index] : "Practice";
+}
+
+const char* CourseInstruction(uint32 index) noexcept
+{
+    constexpr const char* instructions[kCourseCount] = {
+        "Tap behind the boat to push it toward the green dock. Tap ahead to slow down.",
+        "Guide the boat around the rock to the green dock; arrive slowly.",
+        "Weave around the staggered rocks, then slow down inside the green dock.",
+    };
+    return index < kCourseCount ? instructions[index] : "Guide the boat with the water.";
+}
+
+bool RippleGame::LoadCourse(uint32 index) noexcept
+{
+    LevelDefinition level;
+    RippleGame next;
+    if (!TryGetCourseLevel(index, level) || !next.LoadLevel(level))
+    {
+        return false;
+    }
+    next.mCampaignActive = true;
+    next.mCourseIndex = index;
+    *this = next;
+    return true;
+}
+
+bool RippleGame::StartCampaign() noexcept
+{
+    return LoadCourse(0);
+}
+
+bool RippleGame::NextCourse() noexcept
+{
+    return mCampaignActive && mPhase == GamePhase::Arrived && mCourseIndex + 1 < kCourseCount &&
+           LoadCourse(mCourseIndex + 1);
+}
+
 bool CircleContact(Point start, Point end, Point origin, float64 radius, float64& time) noexcept
 {
     if (!std::isfinite(start.X) || !std::isfinite(start.Y) || !std::isfinite(end.X) || !std::isfinite(end.Y) ||
@@ -160,6 +227,8 @@ bool RippleGame::LoadLevel(const LevelDefinition& level) noexcept
         }
     }
     mLevel = level;
+    mCampaignActive = false;
+    mCourseIndex = 0;
     Reset();
     return true;
 }
@@ -533,8 +602,12 @@ void RippleGame::Reset() noexcept
 {
     const auto settings = mPhysics;
     const auto level = mLevel;
+    const bool campaignActive = mCampaignActive;
+    const auto courseIndex = mCourseIndex;
     *this = RippleGame{};
     mLevel = level;
+    mCampaignActive = campaignActive;
+    mCourseIndex = courseIndex;
     (void)SetPhysics(settings);
     mBoat.Position = level.Spawn;
     mBoat.PreviousPosition = level.Spawn;

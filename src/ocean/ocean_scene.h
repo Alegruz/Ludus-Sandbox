@@ -48,7 +48,7 @@ public:
     // between UI/config and the GPU-free settings. The scene never mutates it.
     explicit OceanScene(const ocean::SettingsStore& store) noexcept : mStore(&store)
     {
-        (void)mGame.LoadLevel(game::RescueLevel());
+        (void)mGame.StartCampaign();
     }
 
     bool Start(rhi::BackendSelection selection = rhi::BackendSelection::Auto) noexcept;
@@ -98,6 +98,18 @@ public:
         ocean::ResetTime(mClock);
         mGame.Reset();
         CancelGameInput();
+    }
+    [[nodiscard]] bool NextCourse() noexcept
+    {
+        if (mState != SceneState::Playing || !mGameEnabled || mGame.Phase() != game::GamePhase::Arrived ||
+            !(mGame.CampaignComplete() ? mGame.StartCampaign() : mGame.NextCourse()))
+        {
+            return false;
+        }
+        ocean::ResetTime(mClock);
+        mClock.Paused = false;
+        CancelGameInput();
+        return true;
     }
 
     [[nodiscard]] game::PlacementResult PlaceRipple(foundation::float64 x, foundation::float64 y) noexcept;

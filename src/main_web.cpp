@@ -67,6 +67,7 @@ EM_JS(void, PresentState, (int state, int error, unsigned frames, int backend, i
     document.getElementById('game-controls').hidden = state !== 2;
     document.getElementById('game-status').hidden = state !== 2;
     document.getElementById('game-instructions').hidden = state !== 2;
+    document.getElementById('course-title').hidden = state !== 2;
     document.getElementById('status-restart').hidden = state === 1 || state === 2;
     if (globalThis.__oceanOnState) globalThis.__oceanOnState(state, error, frames);
 });
@@ -84,18 +85,26 @@ EM_JS(void, PublishSettings, (const char* json), {
 });
 EM_JS(void, PresentGame, (float64 x, float64 y, uint32 placements, uint32 contacts, uint32 ticks,
                          uint32 rings, uint32 waves, uint32 vortices, uint32 result, float64 cooldown, int paused, int enabled,
-                         uint32 phase, uint32 crash, float64 vx, float64 vy, float64 docking), {
+                         uint32 phase, uint32 crash, float64 vx, float64 vy, float64 docking,
+                         uint32 course, uint32 courseCount, int complete, const char* title, const char* instruction), {
     const hud = document.getElementById('game-status');
     if (!hud) return;
     Object.assign(hud.dataset, {x, y, placements, contacts, ticks, rings, waves, vortices, result, cooldown,
                                paused: String(!!paused), enabled: String(!!enabled), vx, vy, docking, crash,
-                               phase: ['playing', 'crashed', 'arrived'][phase]});
+                               phase: ['playing', 'crashed', 'arrived'][phase], course, courseCount, complete: String(!!complete)});
+    const heading = document.getElementById('course-title');
+    const headingText = 'Course ' + course + ' / ' + courseCount + ' \u2014 ' + UTF8ToString(title);
+    if (heading.textContent !== headingText) heading.textContent = headingText;
+    const instructions = document.getElementById('game-instructions');
+    const instructionText = UTF8ToString(instruction) + ' Swipe for waves; circle for swirls.';
+    if (instructions.textContent !== instructionText) instructions.textContent = instructionText;
     const feedback = ['Tap for ripples. Swipe for waves. Circle for swirls.', 'Ripple queued.', 'Ripple sent.',
                       'Ripple recharging...', 'Too many ripples. Wait a moment.',
                       'Tap clear water, away from rocks.', 'Resume to place a ripple.'];
     const message = !enabled ? 'Ocean tuning mode.' : phase === 1 ?
                     (crash === 1 ? 'Crashed into a rock. Retry to rescue the boat.' : 'Reached the water boundary. Retry to rescue the boat.') :
-                    phase === 2 ? 'Boat rescued! Retry to sail the course again.' : paused ? 'Paused.' :
+                    phase === 2 ? (complete ? 'All three courses complete! Play again to start a new run.' :
+                    'Boat rescued! Continue to the next level.') : paused ? 'Paused.' :
                     docking > 0 ? 'Mooring… Keep the boat slow inside the green dock.' :
                     vortices > 0 ? 'Swirling current.' : waves > 0 ? 'Wave rolling through.' :
                     cooldown > 0 ? 'Ripple recharging...' : feedback[result] || feedback[0];
@@ -105,6 +114,14 @@ EM_JS(void, PresentGame, (float64 x, float64 y, uint32 placements, uint32 contac
     button.disabled = enabled && phase !== 0;
     button.setAttribute('aria-pressed', String(!!paused));
     document.getElementById('mode').setAttribute('aria-pressed', String(!!enabled));
+    const next = document.getElementById('game-next');
+    next.hidden = !enabled || phase !== 2;
+    next.disabled = !enabled || phase !== 2;
+    next.textContent = complete ? 'Play again' : 'Next level';
+    const playing = document.getElementById('status').dataset.state === 'playing';
+    document.getElementById('panel').hidden = !!enabled || !playing;
+    heading.hidden = !enabled || !playing;
+    instructions.hidden = !enabled || !playing;
 });
 // clang-format on
 
@@ -147,7 +164,12 @@ void Frame() noexcept
                 static_cast<uint32>(game.Crash()),
                 boat.Velocity.X,
                 boat.Velocity.Y,
-                game.DockProgress());
+                game.DockProgress(),
+                game.CourseIndex() + 1,
+                ludus::sandbox::game::kCourseCount,
+                game.CampaignComplete() ? 1 : 0,
+                ludus::sandbox::game::CourseTitle(game.CourseIndex()),
+                ludus::sandbox::game::CourseInstruction(game.CourseIndex()));
 }
 } // namespace
 
@@ -190,6 +212,10 @@ EMSCRIPTEN_KEEPALIVE int DriftPlace(float64 x, float64 y) noexcept
 EMSCRIPTEN_KEEPALIVE int DriftStroke(float64 x, float64 y, uint32 phase) noexcept
 {
     return static_cast<int>(gScene.Stroke(x, y, phase));
+}
+EMSCRIPTEN_KEEPALIVE int DriftNextCourse() noexcept
+{
+    return gScene.NextCourse() ? 1 : 0;
 }
 EMSCRIPTEN_KEEPALIVE void DriftSetEnabled(int enabled) noexcept
 {

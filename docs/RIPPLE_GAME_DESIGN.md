@@ -1,9 +1,9 @@
 # Drift ripple boat game design
 
 Status: Game design, updated October 3, 2026. The ocean, boat, interactive
-ripples, swept hazards, docking, and Retry are implemented for one authored course.
-Three-level progression remains planned;
-see the [implementation record](RIPPLE_GAME_IMPLEMENTATION.md) for current behavior.
+ripples, swept hazards, docking, Retry and three-course progression are implemented.
+See the [three-course implementation record](RIPPLE_GAME_M3.md) for current
+behavior and remaining playtest acceptance.
 
 The player rescues a boat with a broken motor by placing ripples on the water.
 Each expanding ring pushes the boat away from its origin when it reaches the

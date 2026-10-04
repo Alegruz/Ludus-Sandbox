@@ -19,6 +19,7 @@ inline constexpr float64 kWaveSpeed = 12.0;
 inline constexpr float64 kWaveLifetime = 3.0;
 inline constexpr float64 kVortexLifetime = 5.0;
 inline constexpr usize kRockCapacity = 16;
+inline constexpr uint32 kCourseCount = 3;
 inline constexpr float64 kTickSeconds = 1.0 / 60.0;
 inline constexpr float64 kRippleSpeed = 20.0;
 inline constexpr float64 kRippleLifetime = 1.5;
@@ -53,6 +54,10 @@ struct LevelDefinition final
     bool BoundaryHazard = false;
 };
 [[nodiscard]] LevelDefinition RescueLevel() noexcept;
+// Zero-based authored campaign catalog. Invalid lookups leave output unchanged.
+[[nodiscard]] bool TryGetCourseLevel(uint32 index, LevelDefinition& output) noexcept;
+[[nodiscard]] const char* CourseTitle(uint32 index) noexcept;
+[[nodiscard]] const char* CourseInstruction(uint32 index) noexcept;
 enum class GamePhase : uint8
 {
     Playing,
@@ -134,6 +139,20 @@ class RippleGame final
 public:
     RippleGame() noexcept;
     [[nodiscard]] bool LoadLevel(const LevelDefinition& level) noexcept;
+    [[nodiscard]] bool StartCampaign() noexcept;
+    [[nodiscard]] bool NextCourse() noexcept;
+    [[nodiscard]] bool CampaignActive() const noexcept
+    {
+        return mCampaignActive;
+    }
+    [[nodiscard]] uint32 CourseIndex() const noexcept
+    {
+        return mCourseIndex;
+    }
+    [[nodiscard]] bool CampaignComplete() const noexcept
+    {
+        return mCampaignActive && mCourseIndex == kCourseCount - 1 && mPhase == GamePhase::Arrived;
+    }
     [[nodiscard]] const LevelDefinition& GetLevel() const noexcept
     {
         return mLevel;
@@ -212,6 +231,7 @@ public:
     }
 
 private:
+    [[nodiscard]] bool LoadCourse(uint32 index) noexcept;
     [[nodiscard]] SurfaceEffect* StrokeEffect() noexcept;
     SurfaceEffect mSurface[kSurfaceCapacity];
     Point mStroke[kStrokeCapacity];
@@ -223,6 +243,8 @@ private:
     float64 mStrokeAbsoluteTurn = 0.0;
     bool mStroking = false;
     LevelDefinition mLevel;
+    bool mCampaignActive = false;
+    uint32 mCourseIndex = 0;
     GamePhase mPhase = GamePhase::Playing;
     CrashReason mCrash = CrashReason::None;
     uint32 mDockTicks = 0;
