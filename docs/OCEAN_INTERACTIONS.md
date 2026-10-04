@@ -41,8 +41,8 @@ and advected momentum. It does not resolve deep-water dispersion, overturning
 breakers, air or airborne spray. Foam is a transported visual tracer, not a
 separate multiphase fluid.
 
-One bounded allocation holds the grid, scratch buffers, precomputed wind bases
-and sixteen finite splash sources. Reset/stepping/input reuse it; no hot-path
+Initialization allocates private engine grid buffers and game storage for
+precomputed wind bases and sixteen finite splash sources. Reset/stepping/input reuse it; no hot-path
 allocations occur. Allocation failure is explicit through `Ready()`. Pointer
 forcing integrates a compact 4 m brush with at most 0.4 m spacing, independent
 of event density. Cancellation stops new forcing while existing waves evolve.
@@ -102,8 +102,30 @@ material advection, boat response, input cancellation and campaign transitions.
 Browser tests use actual mouse/emulated touch strokes, rendered screenshots,
 exact pause freezing and graphics restart, plus the rescue campaign steered by
 currents. Read-only diagnostics expose energy, height, curl and divergence.
-Results and exact package identity are recorded in `OCEAN_WAVES_VALIDATION.json`.
+The pre-extraction results and package identity are recorded in
+`OCEAN_WAVES_VALIDATION.json`.
 The software-GPU campaign/gesture CI uses half render resolution while
 retaining full simulation and pointer coordinates. Renderer and splash snapshots
 run at full test resolution. SwiftShader verifies software rendering; physical mobile performance and the
 hosted itch.io build remain separate acceptance work.
+
+## Installed engine fluid ownership
+
+The grid implementation now comes from `Ludus::PhysicsFluid` in the installed
+SDK (`<ludus/physics/fluid/field.h>`). `WaterField` adapts game coordinates and
+rock masks, seeds the authored sea, and updates pressure envelopes for wind and
+finite splashes before each depth-aware substep. Sampling and surface extraction
+read that same engine field, preserving the boat/render authority boundary.
+
+The engine owns velocity advection, gravity gradients, closed faces, conservative
+height fluxes, the positive-depth drainage limiter, material transport, foam and
+momentum strokes. The game owns their use and tuning. The former duplicated
+standalone/SDK ripple suites become one production SDK-linked suite; ocean
+settings tests remain standalone. Native CI analyzes the adapter with its actual
+SDK compile database. Browser CI tests the exact packaged Release payload.
+
+Engine equations, API contracts and source review are documented in
+[fluid-field.md](https://github.com/Alegruz/Ludus/blob/codex/fluid-field/docs/architecture/fluid-field.md)
+and [fluid-field-reference-review.md](https://github.com/Alegruz/Ludus/blob/codex/fluid-field/docs/architecture/fluid-field-reference-review.md).
+Historical validation JSON records retain their original revision and hashes;
+they do not certify this extraction. New checks are recorded separately.
