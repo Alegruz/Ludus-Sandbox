@@ -1,5 +1,8 @@
 # Drift ripple game architecture
 
+> Current courses use [vertical river runs](RIVER_RUNS.md), added October 4, 2026.
+> The original whole-screen courses below are historical.
+
 > Historical design/validation record. The current shallow-water solver, finite
 > splashes, wave interference and full surface rendering supersede the analytic
 > ring force and shading described below. See [Ocean interactions](OCEAN_INTERACTIONS.md).

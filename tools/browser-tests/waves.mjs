@@ -65,7 +65,7 @@ try {
     await until(() => state(page), s => Number(s.energy) === 0, 'calm reset');
     const view = await canvasView(page);
     const tap = async x => {
-      const point = view.point(x, -22);
+      const point = view.point(x, -60);
       if (mobile) await page.touchscreen.tap(point.x, point.y); else await page.mouse.click(point.x, point.y);
     };
     await tap(-8);
@@ -76,7 +76,7 @@ try {
     await page.evaluate(() => Module._OceanSetPaused(1));
     await delay(200);
     const waves = await state(page);
-    const between = await page.evaluate(() => Module._DriftWaterSample(0, -22, 2));
+    const between = await page.evaluate(() => Module._DriftWaterSample(0, -60, 2));
     assert(Math.abs(between) > 0.01, 'Waves have not propagated outside the splash footprints');
     assert(Number(waves.energy) > 1, 'Disturbance expired with its source');
     await page.screenshot({path: resolve(output, backend + '-overlap.png')});

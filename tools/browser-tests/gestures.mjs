@@ -99,7 +99,7 @@ try {
       await page.evaluate(() => { Module._OceanSetWaveIntensity(0); Module._OceanSetPaused(0); });
       await delay(700);
       await reset();
-      const start = screen(-14, -22), end = screen(-4, -22);
+      const start = screen(-14, -60), end = screen(-4, -60);
       await pointer(0, start);
       for (let i = 1; i <= 16; ++i) {
         await pointer(1, {x: start.x + (end.x - start.x) * i / 16, y: start.y});
@@ -110,15 +110,15 @@ try {
       await until(() => state(page), s => Number(s.x) > 0.1, 'wave transports boat in swipe direction');
       const wave = await state(page);
       await page.screenshot({path: resolve(output, name + '-wave.png')});
-      assert(Math.abs(Number(wave.y) + 22) < 0.08, 'Horizontal swipe has vertical force');
+      assert(Number(wave.y) > -60, 'Background river flow is missing');
       await reset();
       // World counterclockwise appears counterclockwise on the rendered ocean.
       for (const sign of [1, -1]) {
-        const initial = screen(0, -22);
+        const initial = screen(0, -60);
         await pointer(0, initial);
         for (let i = 1; i <= 48; ++i) {
           const angle = sign * i * Math.PI * 2 / 48;
-          await pointer(1, screen(-6 + Math.cos(angle) * 6, -22 + Math.sin(angle) * 6));
+          await pointer(1, screen(-6 + Math.cos(angle) * 6, -60 + Math.sin(angle) * 6));
         }
         await pointer(2, initial);
         await until(() => state(page), s => Number(s.curl) > 0.2 && Number(s.energy) > 10, 'stirring produces vorticity');
@@ -126,19 +126,19 @@ try {
           let sum = 0;
           for (let i = 0; i < 64; ++i) {
             const angle = (i + 0.5) * Math.PI * 2 / 64;
-            const x = -6 + Math.cos(angle) * 6, y = -22 + Math.sin(angle) * 6;
+            const x = -6 + Math.cos(angle) * 6, y = -60 + Math.sin(angle) * 6;
             sum += (-Module._DriftWaterSample(x, y, 0) * Math.sin(angle) +
                      Module._DriftWaterSample(x, y, 1) * Math.cos(angle)) * 6 * Math.PI * 2 / 64;
           }
           return sum;
         });
         assert(circulation * sign > 10, 'Circulation disagrees with the drawn direction');
-        await until(() => state(page), s => (Number(s.y) + 22) * sign > 0.08, 'vortex rotation reaches boat');
+        await until(() => page.evaluate(() => Module._DriftWaterSample(0, -60, 1)), v => v * sign > 0.08, 'vortex water reaches boat');
         assert.equal(Number((await state(page)).placements), 0, 'Circle emitted a tap ripple');
-        const firstMaterial = await page.evaluate(() => Module._DriftWaterSample(0, -22, 5));
+        const firstMaterial = await page.evaluate(() => Module._DriftWaterSample(0, -60, 5));
         const moving = await state(page);
         await until(() => state(page), s => Number(s.ticks) >= Number(moving.ticks) + 24, 'released field evolves');
-        const laterMaterial = await page.evaluate(() => Module._DriftWaterSample(0, -22, 5));
+        const laterMaterial = await page.evaluate(() => Module._DriftWaterSample(0, -60, 5));
         assert((laterMaterial - firstMaterial) * sign > 0.05, 'Water pattern does not advect after release');
         await pauseWithRenderedFrames(page);
         const frozen = await state(page);
@@ -165,7 +165,7 @@ try {
         const canvas = document.getElementById('canvas');
         const rect = canvas.getBoundingClientRect();
         const event = (type, id, primary = true) => new PointerEvent(type, {bubbles: true,
-          pointerId: id, isPrimary: primary, button: 0, clientX: rect.left + rect.width / 2, clientY: rect.top + rect.height / 2 + 22 * rect.height / Math.max(90, 70 / (rect.width / rect.height))});
+          pointerId: id, isPrimary: primary, button: 0, clientX: rect.left + rect.width / 2, clientY: rect.top + rect.height / 2 + 60 * rect.height / Math.max(90, 70 / (rect.width / rect.height))});
         canvas.dispatchEvent(event('pointerdown', 71));
         canvas.dispatchEvent(event('pointerup', 72, false));
         canvas.dispatchEvent(event('pointercancel', 71));

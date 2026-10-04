@@ -37,10 +37,10 @@ BuildUniforms(const OceanSettings& settings, const SceneClock& clock, uint32 wid
 
     u.CurrentDirCos = std::cos(directionRadians);
     u.CurrentDirSin = std::sin(directionRadians);
-    u.Pad0 = 0.0F;
-    u.Pad1 = 0.0F;
+    u.CameraX = 0.0F;
+    u.CameraY = 0.0F;
 
-    u.Pad2 = 0.0F;
+    u.RiverTime = 0.0F;
     u.PadB[0] = 0.0F;
     u.PadB[1] = 0.0F;
     u.PadB[2] = 0.0F;

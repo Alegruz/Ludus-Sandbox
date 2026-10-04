@@ -145,7 +145,8 @@ rhi::FrameStatus OceanScene::RenderFrame(const platform::browser::WindowState& i
     // Seed the uniform before the first draw (required by the contract). We fill
     // it with the current extent; GetFrameInfo may refine it after BeginFrame.
     const auto buildUniforms = [&](uint32 w, uint32 h) noexcept {
-        auto value = game::BuildUniforms(settings, mClock, w, h, mGame, IsPaused() || !mFocused || !mVisible);
+        auto value =
+            game::BuildUniforms(settings, mClock, w, h, mGame, IsPaused() || !mFocused || !mVisible, mGameEnabled);
         value.GameInfo[0] = mGameEnabled ? 1.0F : 0.0F;
         return value;
     };
@@ -200,7 +201,7 @@ rhi::FrameStatus OceanScene::RenderFrame(const platform::browser::WindowState& i
     const uint32 frameW = info.Width > 0 ? info.Width : width;
     const uint32 frameH = info.Height > 0 ? info.Height : height;
     uniforms = buildUniforms(frameW, frameH);
-    mCamera = game::FitCamera(frameW, frameH, mGame.GetLevel().HalfExtent);
+    mCamera = game::PresentationCamera(frameW, frameH, mGame, IsPaused() || !mFocused || !mVisible, mGameEnabled);
     if (rhi::UpdateUniform(mUniform, uploadBytes()) != rhi::ResourceStatus::Ready ||
         rhi::DrawFullscreen(mPipeline) != rhi::ResourceStatus::Ready)
     {
@@ -333,11 +334,13 @@ game::PlacementResult OceanScene::Stroke(float64 x, float64 y, uint32 phase) noe
         mGame.CancelInput();
         return game::PlacementResult::Outside;
     }
-    const auto world = game::ScreenToWorld({x, y}, mCamera);
     if (phase == 0)
     {
-        return mGame.BeginStroke(world);
+        mStrokeCamera = mCamera;
+        return mGame.BeginStroke(game::ScreenToWorld({x, y}, mStrokeCamera));
     }
+    // Camera motion alone must not create momentum during a held gesture.
+    const auto world = game::ScreenToWorld({x, y}, mStrokeCamera);
     return phase == 1 ? mGame.MoveStroke(world) : mGame.EndStroke(world);
 }
 
