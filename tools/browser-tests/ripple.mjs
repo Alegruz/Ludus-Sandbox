@@ -255,7 +255,7 @@ try {
       const replay = await state(page);
       assert.equal(Number(replay.x), 0); assert.equal(Number(replay.y), -22);
       assert.equal(Number(replay.placements), 0); assert.equal(Number(replay.rings), 0);
-      assert.equal(Number(replay.waves), 0); assert.equal(Number(replay.vortices), 0);
+      assert.equal(Number(replay.energy), 0); assert.equal(Number(replay.height), 0);
       assert.equal(replay.complete, 'false');
       assert(await page.locator('#game-next').isHidden());
       assert.equal(errors.length, 0, errors.join('\n'));

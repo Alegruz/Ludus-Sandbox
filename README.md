@@ -3,8 +3,8 @@
 External sandbox application for developing and validating the Ludus engine SDK.
 
 This checkout contains **Drift**, a top-down 2D water playground with a three-course
-boat rescue game. Tap for an expanding ripple, swipe for a traveling
-wave, or draw circles for a swirling current. Waves and swirls transport the
+boat rescue game. Tap for an expanding ripple, drag to add momentum to the water,
+or stir to build circulation. The evolving flow field transports the
 disabled boat in the direction of the gesture; ripples push it away on contact.
 Learn to push and brake in open water, steer around a rock, then weave through
 a staggered channel. Arrive slowly in each green dock to unlock Next level.
@@ -15,7 +15,7 @@ Rendering uses one procedural fullscreen pass authored in Slang, compiled to
 SPIR-V for native Vulkan, WGSL for WebGPU, and generated GLSL ES for WebGL 2.
 Game rules and state live in this repository and consume the installed Ludus SDK.
 
-![Swirling water guides the boat in the rescue course](docs/screenshots/ocean-swirl.png)
+![Swirling water guides the boat in the rescue course](docs/screenshots/ocean-flow-swirl.png)
 
 The browser build is the playable target. Native compilation is verified, but
 native pointer controls have not been connected. All three courses, docking,
@@ -52,7 +52,7 @@ and a fresh-player trial remain open.
 | [First playable implementation](docs/RIPPLE_GAME_IMPLEMENTATION.md) | Implemented controls, tuning, exact validation and remaining acceptance. |
 | [Rescue course](docs/RIPPLE_GAME_M2.md) | Rock hazards, slow docking, crash/Retry, and level validation. |
 | [Three-course game](docs/RIPPLE_GAME_M3.md) | Authored courses, progression, replay and validation. |
-| [Ocean interactions](docs/OCEAN_INTERACTIONS.md) | Swipe waves, signed swirls, water lighting, gesture lifecycle and validation. |
+| [Ocean interactions](docs/OCEAN_INTERACTIONS.md) | Velocity field, divergence-driven waves, circulation, advection and validation. |
 | [docs/VALIDATION.md](docs/VALIDATION.md) | Honest validation results: what was verified here, what requires a GPU host, and how to reproduce the remaining checks. |
 
 CI (`.github/workflows/ci.yml`) defines three gates on every push/PR:

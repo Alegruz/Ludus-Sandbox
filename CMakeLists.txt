@@ -33,6 +33,7 @@ add_library(ludus_sandbox_ocean STATIC
     src/ocean/ocean_clock.cpp
     src/ocean/ocean_uniforms.cpp
     src/game/ripple_game.cpp
+    src/game/water_field.cpp
     src/game/game_render.cpp
 )
 target_include_directories(ludus_sandbox_ocean PUBLIC src)
@@ -107,7 +108,7 @@ if(LUDUS_SANDBOX_BUILD_TESTS AND NOT EMSCRIPTEN)
     target_compile_features(ludus_sandbox_ocean_tests PRIVATE cxx_std_23)
     target_compile_options(ludus_sandbox_ocean_tests PRIVATE -Wall -Wextra -Wpedantic -Werror -fno-exceptions)
     add_executable(ludus_sandbox_ripple_tests
-        tests/ripple_tests.cpp src/game/ripple_game.cpp src/game/game_render.cpp
+        tests/ripple_tests.cpp src/game/ripple_game.cpp src/game/water_field.cpp src/game/game_render.cpp
         src/ocean/ocean_uniforms.cpp src/ocean/ocean_settings.cpp)
     target_include_directories(ludus_sandbox_ripple_tests PRIVATE src)
     target_compile_features(ludus_sandbox_ripple_tests PRIVATE cxx_std_23)

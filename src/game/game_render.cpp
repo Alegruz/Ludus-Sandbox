@@ -1,5 +1,6 @@
 #include "game/game_render.h"
 
+#include <algorithm>
 #include <cmath>
 
 namespace ludus::sandbox::game
@@ -44,26 +45,33 @@ ocean::OceanUniforms BuildUniforms(const ocean::OceanSettings& settings,
         ++count;
     }
     u.GameInfo[1] = static_cast<float32>(count);
-    count = 0;
-    for (usize i = 0; i < game::kSurfaceCapacity; ++i)
+    u.FlowInfo[0] = 16.0F;
+    u.FlowInfo[1] = 24.0F;
+    u.FlowInfo[2] = simulation.GetWater().Active() ? 10.0F : 0.0F;
+    u.FlowInfo[3] = 3.0F;
+    const auto signedByte = [](float64 value, float64 range) noexcept {
+        return static_cast<uint32>(std::clamp(std::round(value / range * 127.0 + 128.0), 1.0, 255.0));
+    };
+    const auto pack = [](uint32 a, uint32 b, uint32 c) noexcept {
+        return static_cast<float32>(a + b * 256U + c * 65536U);
+    };
+    for (usize y = 0; y < 24; ++y)
     {
-        const auto& effect = simulation.GetSurfaceEffects()[i];
-        if (!effect.Active)
+        for (usize x = 0; x < 16; ++x)
         {
-            continue;
+            const Point position{((static_cast<float64>(x) + 0.5) / 16.0 * 2.0 - 1.0) * level.HalfExtent.X,
+                                 ((static_cast<float64>(y) + 0.5) / 24.0 * 2.0 - 1.0) * level.HalfExtent.Y};
+            const auto water = simulation.GetWater().Sample(position);
+            const usize cell = y * 16 + x;
+            auto& packed = u.Flow[cell / 2];
+            packed[(cell % 2) * 2] = pack(signedByte(water.VelocityX, 10.0),
+                                          signedByte(water.VelocityY, 10.0),
+                                          signedByte(water.Height, 3.0));
+            packed[(cell % 2) * 2 + 1] = pack(static_cast<uint32>(std::round(std::clamp(water.Foam, 0.0, 1.0) * 255.0)),
+                                              signedByte(water.DisplacementX, 12.0),
+                                              signedByte(water.DisplacementY, 12.0));
         }
-        auto& surface = u.Surface[count];
-        surface[0][0] = static_cast<float32>(effect.Origin.X);
-        surface[0][1] = static_cast<float32>(effect.Origin.Y);
-        surface[0][2] = static_cast<float32>(effect.PreviousAge + (effect.Age - effect.PreviousAge) * alpha);
-        surface[0][3] = static_cast<float32>(effect.Strength);
-        surface[1][0] = static_cast<float32>(effect.Kind == SurfaceKind::Wave ? effect.Direction.X : effect.DecayAge);
-        surface[1][1] = effect.Kind == SurfaceKind::Wave ? static_cast<float32>(effect.Direction.Y) : 0.0F;
-        surface[1][2] = static_cast<float32>(effect.Radius);
-        surface[1][3] = effect.Kind == SurfaceKind::Wave ? 1.0F : 2.0F;
-        ++count;
     }
-    u.SurfaceInfo[0] = static_cast<float32>(count);
     u.LevelBounds[0] = static_cast<float32>(level.HalfExtent.X);
     u.LevelBounds[1] = static_cast<float32>(level.HalfExtent.Y);
     u.DockInfo[0] = static_cast<float32>(level.DockCenter.X);

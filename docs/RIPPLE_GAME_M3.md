@@ -37,12 +37,12 @@ recreates graphics resources.
 `RippleGame` owns the fixed authored catalog, campaign activation and zero-based
 course index. The default pure simulation remains a practice world;
 `OceanScene` explicitly starts the campaign. Each authored course passes the
-existing `LoadLevel` validation on a fresh temporary game before replacing the
-live game. Invalid lookups and disallowed Next transitions preserve live state
-and queued input. A successful custom `LoadLevel` detaches the campaign.
+existing `LoadLevel` validation before resetting the live game. The flow-field
+update reuses its bounded storage rather than copying a temporary game. Invalid
+lookups and disallowed Next transitions preserve live state and queued input. A successful custom `LoadLevel` detaches the campaign.
 
 Retry preserves campaign identity while clearing input, stroke ownership,
-rings, surface effects, cooldown, counters, docking and interpolation debt.
+rings, the velocity/height field, cooldown, counters, docking and interpolation debt.
 Next and Play again also restore default physics. The scene resets cosmetic
 water clocks and cancels input at transitions. The DOM owns button focus and
 pointer capture; course controls never place a ripple.
