@@ -1,0 +1,158 @@
+// Real pointer strokes and presented water on both renderers. Software-GPU
+// flags and emulated touch do not establish physical-device performance.
+import assert from 'node:assert/strict';
+import {readFile, mkdir, writeFile} from 'node:fs/promises';
+import {createServer} from 'node:http';
+import {resolve, sep} from 'node:path';
+import {setTimeout as delay} from 'node:timers/promises';
+import {chromium} from 'playwright';
+import {PNG} from 'pngjs';
+
+const root = resolve(process.argv[2] || '../../out/browser-qa/extracted');
+const output = resolve(process.argv[3] || '../../out/ocean-feedback/browser');
+await mkdir(output, {recursive: true});
+const server = createServer(async (request, response) => {
+  const pathname = new URL(request.url, 'http://localhost').pathname;
+  const file = resolve(root, '.' + (pathname.endsWith('/') ? pathname + 'index.html' : pathname));
+  if (!file.startsWith(root + sep)) { response.writeHead(403).end(); return; }
+  try {
+    const bytes = await readFile(file);
+    response.writeHead(200, {'Content-Type': file.endsWith('.wasm') ? 'application/wasm' :
+      file.endsWith('.js') ? 'text/javascript' : 'text/html', 'Cache-Control': 'no-store'}).end(bytes);
+  } catch { response.writeHead(404).end(); }
+});
+await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+const base = `http://127.0.0.1:${server.address().port}`;
+const report = {kind: 'Software GPU; mouse and emulated touch', cases: [],
+  rafDelayMs: {mouse: 100, touch: 500},
+  touchDpr: Number(process.env.DRIFT_GESTURE_DPR || 1),
+  args: ['--enable-unsafe-webgpu', '--enable-features=Vulkan', '--use-webgpu-adapter=swiftshader',
+    '--use-angle=swiftshader', '--use-vulkan=swiftshader', '--disable-vulkan-surface', '--enable-unsafe-swiftshader']};
+const state = page => page.locator('#game-status').evaluate(el => ({...el.dataset}));
+async function until(read, predicate, name) {
+  const deadline = Date.now() + 30000;
+  while (Date.now() < deadline) {
+    const value = await read();
+    if (predicate(value)) return value;
+    await delay(50);
+  }
+  throw Error('Timeout: ' + name);
+}
+let browser, activePage;
+try {
+  browser = await chromium.launch({headless: true, args: report.args});
+  report.browserVersion = browser.version();
+  for (const backend of ['webgpu', 'webgl2']) {
+    for (const mobile of [false, true]) {
+      const name = backend + (mobile ? '-touch' : '-mouse');
+      if (process.env.DRIFT_GESTURE_FILTER && !name.includes(process.env.DRIFT_GESTURE_FILTER)) continue;
+      const viewport = mobile ? {width: 390, height: 844} : {width: 960, height: 600};
+      const context = await browser.newContext({viewport, hasTouch: mobile, deviceScaleFactor: mobile ? report.touchDpr : 1});
+      await context.addInitScript(rafDelay => {
+        const raf = requestAnimationFrame;
+        window.requestAnimationFrame = callback => raf(time => setTimeout(() => callback(time), rafDelay));
+      }, mobile ? 500 : 100);
+      const page = await context.newPage(); activePage = page;
+      const errors = [];
+      page.on('console', message => { if (message.type() === 'warning' || message.type() === 'error') errors.push(message.text()); });
+      page.on('pageerror', error => errors.push(String(error)));
+      await page.goto(base + '/?backend=' + backend);
+      await until(() => page.locator('#status').getAttribute('data-state'), s => s === 'playing', 'startup');
+      await until(() => page.locator('#status').getAttribute('data-frames'), n => Number(n) > 2, 'pixels');
+      const viewHeight = Math.max(90, 70 / (viewport.width / viewport.height));
+      const screen = (x, y) => ({x: viewport.width / 2 + x * viewport.height / viewHeight,
+        y: viewport.height / 2 - y * viewport.height / viewHeight});
+      const cdp = mobile ? await context.newCDPSession(page) : null;
+      const pointer = async (phase, point) => {
+        if (mobile) {
+          await cdp.send('Input.dispatchTouchEvent', {type: phase === 0 ? 'touchStart' : phase === 1 ? 'touchMove' : 'touchEnd',
+            touchPoints: phase === 2 ? [] : [{...point, id: 1}]});
+        } else {
+          if (phase !== 2) await page.mouse.move(point.x, point.y);
+          if (phase === 0) await page.mouse.down();
+          if (phase === 2) await page.mouse.up();
+        }
+      };
+      const reset = async () => {
+        await page.evaluate(() => { Module._OceanResetSimulation(); Module._OceanSetPaused(0); });
+        await until(() => state(page), s => Number(s.waves) === 0 && Number(s.vortices) === 0 && Number(s.placements) === 0, 'reset');
+      };
+      await page.evaluate(() => Module._OceanSetPaused(1));
+      await delay(150);
+      await page.screenshot({path: resolve(output, name + '-ocean.png')});
+      await reset();
+      const start = screen(-14, -22), end = screen(-4, -22);
+      await pointer(0, start);
+      for (let i = 1; i <= 16; ++i) {
+        await pointer(1, {x: start.x + (end.x - start.x) * i / 16, y: start.y});
+      }
+      await pointer(2, end);
+      await until(() => state(page), s => Number(s.waves) === 1, 'directional wave');
+      assert.equal(Number((await state(page)).placements), 0, 'Swipe also emitted a tap ripple');
+      // Capture the traveling crest before waiting for it to transport the hull.
+      await page.screenshot({path: resolve(output, name + '-wave.png')});
+      await until(() => state(page), s => Number(s.x) > 0.1, 'wave transports boat in swipe direction');
+      const wave = await state(page);
+      assert(Math.abs(Number(wave.y) + 22) < 0.001, 'Horizontal swipe has vertical force');
+      await reset();
+      // World counterclockwise appears counterclockwise on the rendered ocean.
+      for (const sign of [1, -1]) {
+        const initial = screen(0, -22);
+        await pointer(0, initial);
+        for (let i = 1; i <= 48; ++i) {
+          const angle = sign * i * Math.PI * 2 / 48;
+          await pointer(1, screen(-6 + Math.cos(angle) * 6, -22 + Math.sin(angle) * 6));
+        }
+        await pointer(2, initial);
+        await until(() => state(page), s => Number(s.vortices) === 1 && Number(s.waves) === 0, 'circle becomes vortex');
+        await until(() => state(page), s => (Number(s.y) + 22) * sign > 0.08, 'vortex rotation reaches boat');
+        assert.equal(Number((await state(page)).placements), 0, 'Circle emitted a tap ripple');
+        await page.evaluate(() => Module._OceanSetPaused(1));
+        await until(() => state(page), s => s.paused === 'true', 'freeze vortex');
+        await delay(150);
+        const frozen = await state(page);
+        const firstPixels = PNG.sync.read(await page.screenshot({path: resolve(output, name + (sign > 0 ? '-ccw.png' : '-cw.png'))}));
+        await delay(200);
+        assert.equal((await state(page)).ticks, frozen.ticks, 'Pause advances current');
+        const laterPixels = PNG.sync.read(await page.screenshot());
+        assert(firstPixels.data.equals(laterPixels.data), 'Paused water pixels keep moving');
+        if (sign > 0) {
+          await page.evaluate(() => Module._OceanRestart());
+          await until(() => page.locator('#status').getAttribute('data-state'), s => s === 'playing', 'restart with vortex');
+          await until(() => page.locator('#status').getAttribute('data-frames'), n => Number(n) > 2, 'restart pixels');
+          assert.equal((await state(page)).vortices, frozen.vortices, 'Restart loses current');
+          assert.equal((await state(page)).ticks, frozen.ticks, 'Restart advances paused current');
+        }
+        await reset();
+      }
+      // Pointer identity and cancellation: a second finger cannot end a stroke.
+      await page.evaluate(() => {
+        const canvas = document.getElementById('canvas');
+        const rect = canvas.getBoundingClientRect();
+        const event = (type, id, primary = true) => new PointerEvent(type, {bubbles: true,
+          pointerId: id, isPrimary: primary, button: 0, clientX: rect.width / 2, clientY: rect.height / 2 + 22 * rect.height / Math.max(90, 70 / (rect.width / rect.height))});
+        canvas.dispatchEvent(event('pointerdown', 71));
+        canvas.dispatchEvent(event('pointerup', 72, false));
+        canvas.dispatchEvent(event('pointercancel', 71));
+        canvas.dispatchEvent(event('pointerup', 71));
+      });
+      await delay(250);
+      assert.equal(Number((await state(page)).placements), 0, 'Cancelled pointer emitted a tap');
+      assert.equal(Number((await state(page)).waves), 0, 'Cancelled pointer emitted a wave');
+      assert.equal(errors.length, 0, errors.join('\n'));
+      report.cases.push({name, status: 'passed', wave, errors});
+      console.log(name + ': passed');
+      await context.close(); activePage = undefined;
+    }
+  }
+} catch (error) {
+  report.failure = String(error); process.exitCode = 1;
+  if (activePage) {
+    report.game = await state(activePage).catch(() => null);
+    await activePage.screenshot({path: resolve(output, 'failure.png')}).catch(() => {});
+  }
+} finally {
+  await browser?.close(); server.close();
+  await writeFile(resolve(output, 'report.json'), JSON.stringify(report, null, 2) + '\n');
+  console.log(JSON.stringify(report, null, 2));
+}

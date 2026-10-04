@@ -1,5 +1,7 @@
 #include "game/game_render.h"
 
+#include <cmath>
+
 namespace ludus::sandbox::game
 {
 ocean::OceanUniforms BuildUniforms(const ocean::OceanSettings& settings,
@@ -23,6 +25,9 @@ ocean::OceanUniforms BuildUniforms(const ocean::OceanSettings& settings,
     u.GameInfo[0] = 1.0F;
     u.GameInfo[2] = static_cast<float32>(simulation.CooldownFraction());
     u.GameInfo[3] = static_cast<float32>(boat.ContactFlash / 0.18);
+    u.BoatMotion[0] = static_cast<float32>(boat.Velocity.X);
+    u.BoatMotion[1] = static_cast<float32>(boat.Velocity.Y);
+    u.BoatMotion[2] = static_cast<float32>(std::hypot(boat.Velocity.X, boat.Velocity.Y));
     usize count = 0;
     for (usize i = 0; i < game::kRippleCapacity; ++i)
     {
@@ -39,6 +44,26 @@ ocean::OceanUniforms BuildUniforms(const ocean::OceanSettings& settings,
         ++count;
     }
     u.GameInfo[1] = static_cast<float32>(count);
+    count = 0;
+    for (usize i = 0; i < game::kSurfaceCapacity; ++i)
+    {
+        const auto& effect = simulation.GetSurfaceEffects()[i];
+        if (!effect.Active)
+        {
+            continue;
+        }
+        auto& surface = u.Surface[count];
+        surface[0][0] = static_cast<float32>(effect.Origin.X);
+        surface[0][1] = static_cast<float32>(effect.Origin.Y);
+        surface[0][2] = static_cast<float32>(effect.PreviousAge + (effect.Age - effect.PreviousAge) * alpha);
+        surface[0][3] = static_cast<float32>(effect.Strength);
+        surface[1][0] = static_cast<float32>(effect.Kind == SurfaceKind::Wave ? effect.Direction.X : effect.DecayAge);
+        surface[1][1] = effect.Kind == SurfaceKind::Wave ? static_cast<float32>(effect.Direction.Y) : 0.0F;
+        surface[1][2] = static_cast<float32>(effect.Radius);
+        surface[1][3] = effect.Kind == SurfaceKind::Wave ? 1.0F : 2.0F;
+        ++count;
+    }
+    u.SurfaceInfo[0] = static_cast<float32>(count);
     u.LevelBounds[0] = static_cast<float32>(level.HalfExtent.X);
     u.LevelBounds[1] = static_cast<float32>(level.HalfExtent.Y);
     u.DockInfo[0] = static_cast<float32>(level.DockCenter.X);

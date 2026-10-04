@@ -88,8 +88,8 @@
 </head>
 <body>
 
-<canvas id="canvas" width="1280" height="720" tabindex="0" aria-label="Ripple boat. Click or tap water behind the boat to push it away."></canvas>
-<div id="hud"><div id="status-region"><p id="status" role="status" aria-live="polite" data-state="loading" data-frames="0">Loading the ocean…</p><p class="hint" id="game-instructions">Guide the broken boat around the rock. Arrive slowly in the green dock. Tap behind to push, beside to turn, ahead to slow down.</p>
+<canvas id="canvas" width="1280" height="720" tabindex="0" aria-label="Ocean playground. Tap for ripples, swipe for waves, draw circles for swirling currents."></canvas>
+<div id="hud"><div id="status-region"><p id="status" role="status" aria-live="polite" data-state="loading" data-frames="0">Loading the ocean…</p><p class="hint" id="game-instructions">Guide the boat around the rock to the green dock; arrive slowly. Tap for ripples, swipe for waves, draw circles for swirling currents.</p>
 <p id="game-status" role="status" aria-live="polite">Preparing the boat…</p>
 <div class="btns" id="game-controls">
 <button type="button" id="game-pause" aria-pressed="false">Pause</button>
@@ -183,28 +183,70 @@ const call = (name, ...args) => { try { return Module['_' + name]?.(...args); } 
 // pointer/keydown inside the panel is kept there (stopPropagation) so it never
 // leaks to the canvas/scene.
 const panel = byId('panel');
-byId('status-region').addEventListener('pointerdown', () => call('DriftCancelInput'));
-panel.addEventListener('pointerdown', () => call('DriftCancelInput'));
+let strokePointer = null;
+let strokeCanvas = null;
+function cancelStroke() {
+  const canvas = strokeCanvas, pointer = strokePointer;
+  strokePointer = null;
+  strokeCanvas = null;
+  if (canvas?.hasPointerCapture(pointer)) canvas.releasePointerCapture(pointer);
+  call('DriftCancelInput');
+}
+byId('status-region').addEventListener('pointerdown', cancelStroke);
+panel.addEventListener('pointerdown', cancelStroke);
 ['pointerdown', 'keydown', 'wheel'].forEach((type) =>
   panel.addEventListener(type, (e) => e.stopPropagation(), { passive: true }));
-// Primary Pointer Events are the sole placement source: no click/touchstart
-// listener exists that could duplicate synthetic mouse events on mobile.
+// One primary pointer owns each stroke. Taps commit on release; drags stream
+// their world-space path to the simulation while the pointer is captured.
 // Backend selection/restart may replace the canvas. Delegate to the current
 // element so both fallback and repeated graphics restarts retain game input.
 document.addEventListener('pointerdown', (event) => {
   const canvas = byId('canvas');
   if (event.target !== canvas) return;
   if (!event.isPrimary || event.button !== 0) return;
+  if (strokeCanvas && strokeCanvas !== canvas) cancelStroke();
+  if (strokePointer !== null) return;
   event.preventDefault();
   canvas.focus({preventScroll: true});
   const rect = canvas.getBoundingClientRect();
   if (rect.width <= 0 || rect.height <= 0) return;
-  call('DriftPlace', (event.clientX - rect.left) / rect.width, (event.clientY - rect.top) / rect.height);
+  const result = call('DriftStroke', (event.clientX - rect.left) / rect.width,
+    (event.clientY - rect.top) / rect.height, 0);
+  if (result !== 1) return;
+  strokePointer = event.pointerId;
+  strokeCanvas = canvas;
+  if (event.isTrusted) canvas.setPointerCapture(event.pointerId);
 }, {passive: false});
+function updateStroke(event, phase) {
+  if (event.pointerId !== strokePointer) return;
+  if (strokeCanvas !== byId('canvas') || !strokeCanvas.isConnected) { cancelStroke(); return; }
+  event.preventDefault();
+  const rect = strokeCanvas.getBoundingClientRect();
+  if (rect.width <= 0 || rect.height <= 0) { cancelStroke(); return; }
+  const samples = phase === 1 ? (event.getCoalescedEvents?.() || []) : [];
+  for (const sample of samples.length ? samples : [event]) {
+    const result = call('DriftStroke', (sample.clientX - rect.left) / rect.width,
+      (sample.clientY - rect.top) / rect.height, phase);
+    if (result === 5 || result === 6) { cancelStroke(); return; }
+  }
+  if (phase === 2) {
+    const canvas = strokeCanvas, pointer = strokePointer;
+    strokePointer = null;
+    strokeCanvas = null;
+    if (canvas.hasPointerCapture(pointer)) canvas.releasePointerCapture(pointer);
+  }
+}
+document.addEventListener('pointermove', event => updateStroke(event, 1), {passive: false});
+document.addEventListener('pointerup', event => updateStroke(event, 2), {passive: false});
 document.addEventListener('pointercancel', (event) => {
-  if (event.target === byId('canvas')) call('DriftCancelInput');
+  if (event.pointerId === strokePointer) cancelStroke();
 });
-window.addEventListener('blur', () => call('DriftSetFocused', 0));
+document.addEventListener('lostpointercapture', event => {
+  if (event.pointerId === strokePointer) cancelStroke();
+});
+window.addEventListener('blur', () => { cancelStroke(); call('DriftSetFocused', 0); });
+window.addEventListener('resize', cancelStroke);
+document.addEventListener('visibilitychange', cancelStroke);
 window.addEventListener('focus', () => call('DriftSetFocused', 1));
 byId('game-pause').addEventListener('click', () => call('OceanSetPaused', call('OceanIsPaused') ? 0 : 1));
 byId('game-reset').addEventListener('click', () => call('OceanResetSimulation'));

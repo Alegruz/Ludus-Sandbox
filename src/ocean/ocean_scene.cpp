@@ -161,7 +161,10 @@ rhi::FrameStatus OceanScene::RenderFrame(const platform::browser::WindowState& i
         mUniformSeeded = true;
     }
 
-    const rhi::FrameTarget target = {
+    // clang-format off
+    // Ludus requires a separate opening brace for multiline designated initializers.
+    const rhi::FrameTarget target =
+    {
         .Width = width,
         .Height = height,
         .Red = static_cast<float64>(settings.DeepColor.R),
@@ -169,6 +172,7 @@ rhi::FrameStatus OceanScene::RenderFrame(const platform::browser::WindowState& i
         .Blue = static_cast<float64>(settings.DeepColor.B),
         .Alpha = 1.0,
     };
+    // clang-format on
     // SetFrameTarget only reports Ready/Skipped (resource-preserving) here, since
     // we never pass a zero extent and only call it between frames after Ready.
     // Anything other than Ready is treated as a resource-preserving skip, not a
@@ -315,6 +319,25 @@ game::PlacementResult OceanScene::PlaceRipple(float64 x, float64 y) noexcept
         return game::PlacementResult::Outside;
     }
     return mGame.Place(game::ScreenToWorld({x, y}, mCamera));
+}
+
+game::PlacementResult OceanScene::Stroke(float64 x, float64 y, uint32 phase) noexcept
+{
+    if (mState != SceneState::Playing || !mGameEnabled || IsPaused() || !mVisible || !mFocused)
+    {
+        return game::PlacementResult::Inactive;
+    }
+    if (!std::isfinite(x) || !std::isfinite(y) || x < 0.0 || x > 1.0 || y < 0.0 || y > 1.0 || phase > 2)
+    {
+        mGame.CancelInput();
+        return game::PlacementResult::Outside;
+    }
+    const auto world = game::ScreenToWorld({x, y}, mCamera);
+    if (phase == 0)
+    {
+        return mGame.BeginStroke(world);
+    }
+    return phase == 1 ? mGame.MoveStroke(world) : mGame.EndStroke(world);
 }
 
 } // namespace ludus::sandbox

@@ -83,20 +83,21 @@ EM_JS(void, PublishSettings, (const char* json), {
     if (globalThis.__oceanOnSettings) globalThis.__oceanOnSettings(text);
 });
 EM_JS(void, PresentGame, (float64 x, float64 y, uint32 placements, uint32 contacts, uint32 ticks,
-                         uint32 rings, uint32 result, float64 cooldown, int paused, int enabled,
+                         uint32 rings, uint32 waves, uint32 vortices, uint32 result, float64 cooldown, int paused, int enabled,
                          uint32 phase, uint32 crash, float64 vx, float64 vy, float64 docking), {
     const hud = document.getElementById('game-status');
     if (!hud) return;
-    Object.assign(hud.dataset, {x, y, placements, contacts, ticks, rings, result, cooldown,
+    Object.assign(hud.dataset, {x, y, placements, contacts, ticks, rings, waves, vortices, result, cooldown,
                                paused: String(!!paused), enabled: String(!!enabled), vx, vy, docking, crash,
                                phase: ['playing', 'crashed', 'arrived'][phase]});
-    const feedback = ['Click or tap water to send a ripple.', 'Ripple queued.', 'Ripple sent.',
+    const feedback = ['Tap for ripples. Swipe for waves. Circle for swirls.', 'Ripple queued.', 'Ripple sent.',
                       'Ripple recharging...', 'Too many ripples. Wait a moment.',
                       'Tap clear water, away from rocks.', 'Resume to place a ripple.'];
     const message = !enabled ? 'Ocean tuning mode.' : phase === 1 ?
                     (crash === 1 ? 'Crashed into a rock. Retry to rescue the boat.' : 'Reached the water boundary. Retry to rescue the boat.') :
                     phase === 2 ? 'Boat rescued! Retry to sail the course again.' : paused ? 'Paused.' :
                     docking > 0 ? 'Mooring… Keep the boat slow inside the green dock.' :
+                    vortices > 0 ? 'Swirling current.' : waves > 0 ? 'Wave rolling through.' :
                     cooldown > 0 ? 'Ripple recharging...' : feedback[result] || feedback[0];
     if (hud.textContent !== message) hud.textContent = message;
     const button = document.getElementById('game-pause');
@@ -136,6 +137,8 @@ void Frame() noexcept
                 static_cast<uint32>(game.Contacts()),
                 static_cast<uint32>(game.Ticks()),
                 game.ActiveRipples(),
+                game.ActiveSurfaceEffects(ludus::sandbox::game::SurfaceKind::Wave),
+                game.ActiveSurfaceEffects(ludus::sandbox::game::SurfaceKind::Vortex),
                 static_cast<uint32>(game.LastPlacement()),
                 game.CooldownFraction(),
                 gScene.IsPaused() ? 1 : 0,
@@ -183,6 +186,10 @@ EMSCRIPTEN_KEEPALIVE void OceanResetSimulation() noexcept
 EMSCRIPTEN_KEEPALIVE int DriftPlace(float64 x, float64 y) noexcept
 {
     return static_cast<int>(gScene.PlaceRipple(x, y));
+}
+EMSCRIPTEN_KEEPALIVE int DriftStroke(float64 x, float64 y, uint32 phase) noexcept
+{
+    return static_cast<int>(gScene.Stroke(x, y, phase));
 }
 EMSCRIPTEN_KEEPALIVE void DriftSetEnabled(int enabled) noexcept
 {

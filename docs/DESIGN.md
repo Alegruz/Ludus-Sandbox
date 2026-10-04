@@ -104,7 +104,7 @@ Robustness rules (all in `SceneClock::Advance`, all unit-tested):
 
 `OceanUniforms` (CPU, `src/ocean/ocean_uniforms.h`) mirrors the `OceanUniforms`
 constant buffer in `shaders/ocean.slang`. It is **set/group 0, binding 0**,
-visible to both stages, **432 bytes** (within the engine's 16..4096, multiple of
+visible to both stages, **1024 bytes** (within the engine's 16..4096, multiple of
 16 bound). The field offsets were taken from the Slang std140 reflection and are
 `static_assert`-checked, so a CPU/GPU layout drift is a compile error. Per the
 engine guidance, CPU layout is the application's contract: we read the per-target
@@ -114,6 +114,10 @@ The original ocean fields occupy bytes 0–143. Boat state begins at 144, game
 state at 160, and sixteen 16-byte ripple records at 176. Slang uses individually
 named `ripple0` through `ripple15` fields to satisfy the engine's current WebGL 2
 reflection subset; the contiguous CPU array has the same offsets and stride.
+Rescue bounds, dock and level state begin at 432, 448 and 464, with rock
+records at 480. Surface metadata begins at 736, eight pairs of vec4 effect
+records at 752, and boat velocity/speed at 1008. These also use named Slang fields and a
+contiguous CPU mirror. See [Ocean interactions](OCEAN_INTERACTIONS.md).
 
 In boat mode, the camera fits a 60 × 80 m placement area with a 5 m margin:
 `viewHeight = max(90, 70 / aspect)` and `viewWidth = viewHeight * aspect`.

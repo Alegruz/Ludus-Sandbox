@@ -235,6 +235,191 @@ void TestCameraAndSnapshot() noexcept
     CHECK(game.Ticks() == 0 && game.Placements() == 0 && game.Contacts() == 0);
     CHECK(Near(game.GetBoat().Position.X, 0));
 }
+
+void Circle(RippleGame& game, Point center, float64 sign) noexcept
+{
+    constexpr float64 radius = 6.0;
+    (void)game.BeginStroke({center.X + radius, center.Y});
+    for (int i = 1; i <= 48; ++i)
+    {
+        const float64 angle = sign * static_cast<float64>(i) * 6.283185307179586 / 48.0;
+        (void)game.MoveStroke({center.X + std::cos(angle) * radius, center.Y + std::sin(angle) * radius});
+    }
+    (void)game.EndStroke({center.X + radius, center.Y});
+}
+
+void TestSurfaceGestures() noexcept
+{
+    RippleGame game;
+    CHECK(game.BeginStroke({-5, 0}) == PlacementResult::Queued);
+    for (int i = 0; i < 20; ++i)
+    {
+        (void)game.MoveStroke({-5.0 + (i % 2 == 0 ? 0.1 : -0.1), 0});
+    }
+    CHECK(game.EndStroke({-5, 0}) == PlacementResult::Queued);
+    game.Tick();
+    CHECK(game.Placements() == 1); // Jitter remains a single tap.
+    CHECK(game.ActiveSurfaceEffects(SurfaceKind::Wave) == 0);
+    game.Reset();
+    (void)game.BeginStroke({-5, 0});
+    game.CancelInput();
+    CHECK(game.EndStroke({-5, 0}) == PlacementResult::Inactive);
+    game.Tick();
+    CHECK(game.Placements() == 0);
+    CHECK(game.BeginStroke({31, 0}) == PlacementResult::Outside);
+    CHECK(game.BeginStroke({std::numeric_limits<float64>::quiet_NaN(), 0}) == PlacementResult::Outside);
+
+    (void)game.BeginStroke({-10, 0});
+    CHECK(game.EndStroke({-2, 0}) == PlacementResult::Placed); // Fast swipe: only down/up.
+    CHECK(game.ActiveSurfaceEffects(SurfaceKind::Wave) == 1);
+    CHECK(game.ActiveSurfaceEffects(SurfaceKind::Vortex) == 0);
+    CHECK(game.Placements() == 0); // Swipe does not also emit an outward ring.
+    for (int i = 0; i < 120; ++i)
+    {
+        game.Tick();
+    }
+    CHECK(game.GetBoat().Position.X > 0.2);
+    CHECK(Near(game.GetBoat().Position.Y, 0));
+    CHECK(game.Contacts() == 0); // Boat is transported by the wave's water current.
+    game.Reset();
+    (void)game.BeginStroke({10, 0});
+    (void)game.EndStroke({2, 0});
+    for (int i = 0; i < 120; ++i)
+    {
+        game.Tick();
+    }
+    CHECK(game.GetBoat().Position.X < -0.2);
+
+    game.Reset();
+    Circle(game, {-6, 0}, 1.0);
+    CHECK(game.ActiveSurfaceEffects(SurfaceKind::Vortex) == 1);
+    CHECK(game.ActiveSurfaceEffects(SurfaceKind::Wave) == 0);
+    CHECK(Near(game.GetSurfaceEffects()[0].Origin.X, -6));
+    CHECK(Near(game.GetSurfaceEffects()[0].Origin.Y, 0));
+    CHECK(game.WaterAt({0, 0}).Y > 0.0);
+    CHECK(Near(game.WaterAt({-6, 0}).X, 0));
+    CHECK(Near(game.WaterAt({30, 40}).Y, 0));
+    const auto snapshot = BuildUniforms(ludus::sandbox::ocean::DefaultSettings(), {}, 960, 540, game, true);
+    CHECK(snapshot.SurfaceInfo[0] == 1.0F);
+    CHECK(snapshot.Surface[0][1][3] == 2.0F);
+    CHECK(snapshot.Surface[0][0][3] > 0.0F);
+    CHECK(snapshot.Surface[1][0][3] == 0.0F);
+    for (int i = 0; i < 60; ++i)
+    {
+        game.Tick();
+    }
+    CHECK(game.GetBoat().Position.Y > 0.1);
+    const auto age = game.GetSurfaceEffects()[0].Age;
+    game.Advance(10.0, false);
+    CHECK(Near(game.GetSurfaceEffects()[0].Age, age));
+    game.Reset();
+    Circle(game, {-6, 0}, -1.0);
+    CHECK(game.WaterAt({0, 0}).Y < 0.0);
+    for (int i = 0; i < 60; ++i)
+    {
+        game.Tick();
+    }
+    CHECK(game.GetBoat().Position.Y < -0.1);
+    for (int i = 0; i < 300; ++i)
+    {
+        game.Tick();
+    }
+    CHECK(game.ActiveSurfaceEffects(SurfaceKind::Vortex) == 0);
+    CHECK(Near(game.WaterAt({0, 0}).Y, 0));
+
+    game.Reset();
+    for (usize i = 0; i < kSurfaceCapacity; ++i)
+    {
+        (void)game.BeginStroke({-10, 0});
+        CHECK(game.EndStroke({-2, 0}) == PlacementResult::Placed);
+    }
+    (void)game.BeginStroke({-10, 0});
+    CHECK(game.EndStroke({-2, 0}) == PlacementResult::Capacity);
+    CHECK(game.ActiveSurfaceEffects(SurfaceKind::Wave) == kSurfaceCapacity);
+    for (int i = 0; i < 181; ++i)
+    {
+        game.Tick();
+    }
+    CHECK(game.ActiveSurfaceEffects(SurfaceKind::Wave) == 0);
+
+    // Stirring for longer than the decay lifetime sustains one current, with
+    // continuous phase and bounded path history. Release then lets it dissipate.
+    game.Reset();
+    (void)game.BeginStroke({0, 0});
+    for (int i = 1; i <= 420; ++i)
+    {
+        const float64 angle = static_cast<float64>(i) * 6.283185307179586 / 48.0;
+        (void)game.MoveStroke({-6.0 + std::cos(angle) * 6.0, std::sin(angle) * 6.0});
+        game.Tick();
+    }
+    CHECK(game.ActiveSurfaceEffects(SurfaceKind::Vortex) == 1);
+    CHECK(game.GetSurfaceEffects()[0].Age > kVortexLifetime);
+    CHECK(game.GetSurfaceEffects()[0].DecayAge < kTickSeconds * 2.0);
+    game.CancelInput();
+    for (int i = 0; i < 301; ++i)
+    {
+        game.Tick();
+    }
+    CHECK(game.ActiveSurfaceEffects(SurfaceKind::Vortex) == 0);
+
+    // Alternating turns have no coherent rotation and must not become a whirlpool.
+    game.Reset();
+    (void)game.BeginStroke({-10, 0});
+    for (int i = 1; i <= 15; ++i)
+    {
+        (void)game.MoveStroke({-10.0 + i, i % 2 == 0 ? 1.0 : -1.0});
+    }
+    (void)game.EndStroke({5, -1});
+    CHECK(game.ActiveSurfaceEffects(SurfaceKind::Vortex) == 0);
+    CHECK(game.ActiveSurfaceEffects(SurfaceKind::Wave) == 1);
+}
+void TestSurfaceLevelRules() noexcept
+{
+    RippleGame game;
+    CHECK(game.LoadLevel(RescueLevel()));
+    CHECK(game.BeginStroke({0, 0}) == PlacementResult::Outside);
+    CHECK(game.LastPlacement() == PlacementResult::Outside);
+    CHECK(game.BeginStroke({-10, 0}) == PlacementResult::Queued);
+    CHECK(game.EndStroke({0, 0}) == PlacementResult::Outside);
+    CHECK(game.LastPlacement() == PlacementResult::Outside);
+    game.Tick();
+    CHECK(game.Placements() == 0 && game.ActiveSurfaceEffects(SurfaceKind::Wave) == 0);
+
+    auto level = RescueLevel();
+    level.HalfExtent = {12, 32};
+    CHECK(game.LoadLevel(level));
+    CHECK(game.BeginStroke({13, -22}) == PlacementResult::Outside);
+    CHECK(game.BeginStroke({-10, -22}) == PlacementResult::Queued);
+    CHECK(game.EndStroke({-2, -22}) == PlacementResult::Placed);
+    CHECK(game.ActiveSurfaceEffects(SurfaceKind::Wave) == 1);
+    game.Reset();
+    CHECK(game.ActiveSurfaceEffects(SurfaceKind::Wave) == 0);
+    CHECK(Near(game.GetBoat().Position.Y, -22));
+
+    PhysicsSettings physics;
+    physics.DragRate = 0.0;
+    physics.MaxBoatSpeed = 100.0;
+    CHECK(game.SetPhysics(physics));
+    level = {};
+    level.Spawn = {-3.1, 0};
+    level.SpawnVelocity = {100, 0};
+    level.RockCount = 1;
+    level.Rocks[0] = {.Center = {0, 0}, .Radius = 1, .Id = 1};
+    CHECK(game.LoadLevel(level));
+    CHECK(game.BeginStroke({-10, -10}) == PlacementResult::Queued);
+    CHECK(game.EndStroke({-2, -10}) == PlacementResult::Placed);
+    game.Tick();
+    CHECK(game.Phase() == GamePhase::Crashed);
+    CHECK(Near(game.GetSurfaceEffects()[0].Age, 0.001));
+    CHECK(game.BeginStroke({-10, -10}) == PlacementResult::Inactive);
+    CHECK(game.MoveStroke({-2, -10}) == PlacementResult::Inactive);
+    game.Advance(1.0, true);
+    CHECK(Near(game.GetSurfaceEffects()[0].Age, 0.001));
+    CHECK(game.ActiveSurfaceEffects(SurfaceKind::Wave) == 1);
+    game.Reset();
+    CHECK(game.ActiveSurfaceEffects(SurfaceKind::Wave) == 0);
+}
+
 void TestLevelValidation() noexcept
 {
     RippleGame game;
@@ -475,6 +660,8 @@ int main()
     TestPresentationRates();
     TestCameraAndSnapshot();
     TestPhysicalCurrentAndTuning();
+    TestSurfaceGestures();
+    TestSurfaceLevelRules();
     TestLevelValidation();
     TestRockOrigins();
     TestSweptHazardsAndRetry();

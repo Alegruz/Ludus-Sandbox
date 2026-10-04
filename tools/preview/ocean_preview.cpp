@@ -1,11 +1,8 @@
-// Offline CPU preview of shaders/ocean.slang.
+// Offline CPU preview of the original ambient ocean shader.
 //
-// This is NOT part of the game. It faithfully ports the ocean fragment shader
-// to CPU so we can render representative PNGs for the screenshots deliverable
-// WITHOUT a GPU. It mirrors the Slang math line-for-line (same helpers, same
-// palette banding, same two-direction waves, same foam gating) and consumes the
-// exact same CPU uniform block the game uploads (ocean::BuildUniforms), so the
-// preview and the shader share one source of truth for scene parameters.
+// This is NOT part of the game. It preserves the initial palette, two-direction
+// waves and foam gating, using ocean::BuildUniforms for scene parameters. It
+// predates the current lighting, interactive waves/currents and boat wake.
 //
 // Appearance must still be verified interactively on a GPU; this only lets us
 // capture the authored look offline and sanity-check the composition.
