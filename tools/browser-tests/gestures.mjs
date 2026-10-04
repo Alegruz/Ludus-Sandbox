@@ -25,7 +25,7 @@ const server = createServer(async (request, response) => {
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 const base = `http://127.0.0.1:${server.address().port}`;
 const report = {kind: 'Software GPU; mouse and emulated touch', cases: [],
-  rafDelayMs: {mouse: 500, touch: 500},
+  rafDelayMs: {mouse: Number(process.env.DRIFT_QA_RAF_MS || 500), touch: Number(process.env.DRIFT_QA_RAF_MS || 500)},
   touchDpr: Number(process.env.DRIFT_GESTURE_DPR || 1),
   renderScale: Number(process.env.DRIFT_GESTURE_SCALE || 1),
   args: ['--enable-unsafe-webgpu', '--enable-features=Vulkan', '--use-webgpu-adapter=swiftshader',
@@ -66,7 +66,7 @@ try {
       await context.addInitScript(rafDelay => {
         const raf = requestAnimationFrame;
         window.requestAnimationFrame = callback => raf(time => setTimeout(() => callback(time), rafDelay));
-      }, 500);
+      }, report.rafDelayMs[mobile ? 'touch' : 'mouse']);
       const page = await context.newPage(); activePage = page;
       const errors = [];
       page.on('console', message => { if (message.type() === 'warning' || message.type() === 'error') errors.push(message.text()); });
@@ -160,6 +160,7 @@ try {
         }
         await reset();
       }
+      const cancelFrame = Number(await page.locator('#status').getAttribute('data-frames'));
       // Pointer identity and cancellation: a second finger cannot end a stroke.
       await page.evaluate(() => {
         const canvas = document.getElementById('canvas');
@@ -171,7 +172,8 @@ try {
         canvas.dispatchEvent(event('pointercancel', 71));
         canvas.dispatchEvent(event('pointerup', 71));
       });
-      await delay(250);
+      await until(() => page.locator('#status').getAttribute('data-frames'),
+        n => Number(n) >= cancelFrame + 2, 'cancelled frames');
       assert.equal(Number((await state(page)).placements), 0, 'Cancelled pointer emitted a tap');
       assert.equal(Number((await state(page)).energy), 0, 'Cancelled pointer injected momentum');
       assert.equal(errors.length, 0, errors.join('\n'));

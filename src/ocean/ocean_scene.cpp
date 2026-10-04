@@ -61,7 +61,7 @@ bool OceanScene::Start(rhi::BackendSelection selection) noexcept
     platform::WindowManager manager;
     if (!manager.Initialize({}) || !manager.CreateWindow(
                                        {
-                                           .Name = "Ludus Drift Ocean",
+                                           .Name = "Poseidon Saves the Day",
                                            .Width = 1280,
                                            .Height = 720,
                                        },
@@ -71,7 +71,8 @@ bool OceanScene::Start(rhi::BackendSelection selection) noexcept
         return false;
     }
 
-    const auto started = rhi::Start({.Name = "Drift Ocean", .Version = 1}, mWindow->GetNativeWindowInfo(), selection);
+    const auto started =
+        rhi::Start({.Name = "Poseidon Saves the Day", .Version = 1}, mWindow->GetNativeWindowInfo(), selection);
     if (started != rhi::StartStatus::Ready && started != rhi::StartStatus::Pending)
     {
         Fail(SceneState::Failed, rhi::GetStartup().Error);

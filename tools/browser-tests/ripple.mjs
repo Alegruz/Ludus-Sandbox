@@ -25,7 +25,7 @@ const server = createServer(async (request, response) => {
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 const base = `http://127.0.0.1:${server.address().port}`;
 const report = {kind: 'Real software GPU, emulated touch; physical devices unverified', cases: [],
-  rafDelayMs: {mouse: 40, touch: 40},
+  rafDelayMs: {mouse: Number(process.env.DRIFT_QA_RAF_MS || 40), touch: Number(process.env.DRIFT_QA_RAF_MS || 40)},
   touchDpr: Number(process.env.DRIFT_GAME_DPR || 1),
   renderScale: Number(process.env.DRIFT_GAME_SCALE || 1),
   args: ['--enable-unsafe-webgpu', '--enable-features=Vulkan', '--use-webgpu-adapter=swiftshader',
@@ -130,6 +130,7 @@ try {
       assert.equal(Number((await state(page)).placements), 0, 'UI emitted a ripple');
       await page.locator('#game-pause').click();
       await until(() => state(page), s => s.paused === 'false', 'resume after restart');
+      const cancelFrame = Number(await page.locator('#status').getAttribute('data-frames'));
       // A cancellation before the next RAF must discard the queued placement.
       await page.evaluate(() => {
         const canvas = document.getElementById('canvas');
@@ -138,7 +139,7 @@ try {
           button: 0, clientX: rect.left + rect.width / 2, clientY: rect.top + rect.height / 2}));
         canvas.dispatchEvent(new PointerEvent('pointercancel', {bubbles: true, isPrimary: true}));
       });
-      await delay(250);
+      await waitFrames(page, cancelFrame + 2);
       assert.equal(Number((await state(page)).placements), 0, 'Cancelled pointer emitted a ripple');
       const {x: rx, y: ry} = (await canvasView(page)).point(5, -60);
       if (mobile) await page.touchscreen.tap(rx, ry); else await page.mouse.click(rx, ry);

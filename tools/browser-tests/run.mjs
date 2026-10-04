@@ -16,7 +16,7 @@ for (const [name, hash] of Object.entries(info.sha256 ?? Object.fromEntries(info
   assert.equal(createHash('sha256').update(await readFile(resolve(root,name))).digest('hex'),hash,name);
 }
 const report = {kind:'Software GPU only; hardware and hosted acceptance unverified',
-  rafDelayMs:100,
+  rafDelayMs:Number(process.env.DRIFT_QA_RAF_MS || 100),
   zipSha256:createHash('sha256').update(await readFile(zip)).digest('hex'), cases:[], requests:[],
   launchArgs:['--enable-unsafe-webgpu','--enable-features=Vulkan','--use-webgpu-adapter=swiftshader',
     '--use-angle=swiftshader','--use-vulkan=swiftshader','--disable-vulkan-surface','--enable-unsafe-swiftshader']};
@@ -77,14 +77,14 @@ async function context(fault='none',options={}) {
   const c=await browser.newContext({viewport:{width:960,height:540},...options});
   contexts.push(c);
   c.on('page',page=>{const messages=[];observed.push({page,messages});page.on('pageerror',e=>messages.push(String(e)));page.on('console',m=>{messages.push({type:m.type(),text:m.text()});});});
-  await c.addInitScript(fault=>{
+  await c.addInitScript(({fault,rafDelayMs})=>{
     // Bound the expensive procedural shader queue on SwiftShader. This is a
-    // test-only 100 ms RAF delay, not evidence for interactive frame rates.
+    // test-only RAF delay, not evidence for interactive frame rates.
     const raf=window.requestAnimationFrame.bind(window);
     window.requestAnimationFrame=cb=>raf(time=>setTimeout(function present() {
       if(window.__qaCapture) { setTimeout(present,20); return; }
       cb(time);
-    },100));
+    },rafDelayMs));
     const get=HTMLCanvasElement.prototype.getContext;
     HTMLCanvasElement.prototype.getContext=function(type,...args){
       if(type==='webgpu'&&fault==='surface')return null;
@@ -105,7 +105,7 @@ async function context(fault='none',options={}) {
       };
       return a;
     };
-  },fault);
+  },{fault,rafDelayMs:report.rafDelayMs});
   return c;
 }
 async function run(name,task) {
@@ -142,8 +142,10 @@ try {
     await capture(page,{path:resolve(output,backend+'.png')});
     const paused=await shot(page);await delay(250);assert(difference(paused,await shot(page))<0.1,'Paused ocean moved');
     await page.locator('#panel summary').click();
+    const resumeFrame=Number(await data(page,'frames'));
     await page.locator('#pause').click(); // Clock was paused through the bridge; this resumes it.
-    await delay(350);assert(difference(paused,await shot(page))>0.2,'Resumed ocean stayed frozen');
+    await until(()=>data(page,'frames'),n=>Number(n)>resumeFrame+2,'resumed frames');
+    assert(difference(paused,await shot(page))>0.2,'Resumed ocean stayed frozen');
     await page.locator('[data-preset="2"]').click();
     await page.locator('#export').click();const settings=JSON.parse(await page.locator('#json').inputValue());
     assert(settings.waveIntensity>0.55,'Choppy preset did not reach the settings store');

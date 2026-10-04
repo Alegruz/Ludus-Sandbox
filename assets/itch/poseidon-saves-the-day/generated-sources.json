@@ -1,0 +1,20 @@
+[
+  {
+    "key": "banner",
+    "filename": "banner.png",
+    "source": "AI-generated marketing artwork",
+    "prompt_source": "generation-prompts.json"
+  },
+  {
+    "key": "background",
+    "filename": "background.png",
+    "source": "AI-generated marketing artwork",
+    "prompt_source": "generation-prompts.json"
+  },
+  {
+    "key": "embed",
+    "filename": "embed-bg.png",
+    "source": "AI-generated marketing artwork",
+    "prompt_source": "generation-prompts.json"
+  }
+]

@@ -1,12 +1,31 @@
-# Design: Drift ocean playground
+# Design: Poseidon Saves the Day
 
 ## Goals
 
 A top-down ocean playground with an evolving shallow-water surface. Wind seeds
 multiple gravity modes; splashes and pointer momentum feed the same solver.
-Surface gradients drive lighting and reflection, and transported foam makes
+Surface gradients drive matte lighting, and transported foam makes
 compression visible. See [Ocean interactions](OCEAN_INTERACTIONS.md) for the
 current physics and rendering contract.
+
+## Art direction
+
+A runnable, top-down **illustrated** 2D ocean for the "Drift" theme, presented as
+**Poseidon Saves the Day**. The title banner establishes a nautical storybook
+palette: ink navy, muted teal pigment washes, parchment foam and golden timber.
+Transported pigment patches and subtle paper grain give the water a painted finish;
+matte lighting keeps the boat, rocks, ripples and dock readable.
+
+The boat has an ochre gunwale, pale planks and two cross benches. Rocks use warm
+stone facets, dark ink rims and broken cream surf. A mint mooring ring with an
+anchor marks the destination, while a thin gold rope marks the water boundary.
+The boat's circular collision envelope, circular rocks, dock radius and boundary
+positions remain exact; decorative details do not change the simulation.
+
+The browser HUD uses cream text, gold serif headings and teal controls. The
+course and rescue actions retain the responsive mobile layout, with ocean
+tuning behind Ocean and instructions in Help. Fonts are local fallbacks; no
+remote font or texture downloads are needed. The same procedural pass renders on all three backends.
 
 ## Architecture: scene/tuning state lives outside GPU code
 

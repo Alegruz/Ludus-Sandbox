@@ -3,12 +3,18 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Drift — ripple boat</title>
+<title>Poseidon Saves the Day</title>
 <style>
   :root {
-    --hud-background: rgba(7,16,34,.92);
-    --hud-border: rgba(255,255,255,.16);
-    --hud-text: #e8eef6;
+    --ink: #081e2a;
+    --sea: #103044;
+    --paper: #f3eedc;
+    --gold: #eeb66b;
+    --teal: #286d70;
+    --muted: #c1d0c9;
+    --hud-background: rgba(8,30,42,.94);
+    --hud-border: rgba(238,182,107,.28);
+    --hud-text: var(--paper);
     --safe-top: env(safe-area-inset-top, 0px);
     --safe-right: env(safe-area-inset-right, 0px);
     --safe-bottom: env(safe-area-inset-bottom, 0px);
@@ -20,9 +26,9 @@
   * { box-sizing: border-box; }
   html, body { height: 100%; margin: 0; }
   body {
-    font: 14px/1.4 system-ui, sans-serif;
+    font: 14px/1.4 "Trebuchet MS", system-ui, sans-serif;
     color: var(--hud-text);
-    background: #0a1222;
+    background: var(--ink);
     overflow: hidden;
   }
   /* The canvas fills the whole viewport (overhead ocean fills the scene). */
@@ -32,35 +38,35 @@
     width: 100%;
     height: 100%;
     display: block;
-    background: #071022;
+    background: var(--ink);
     touch-action: none;
     cursor: crosshair;
   }
-  #canvas:focus-visible { outline: 3px solid #ffd27d; outline-offset: -3px; }
+  #canvas:focus-visible { outline: 3px solid var(--gold); outline-offset: -3px; }
 
   /* Course, controls and optional feedback are separate from the help sheet. */
   #hud { position: fixed; inset: 0; pointer-events: none; }
   #status-region { position: absolute; top: 12px; left: 12px; width: 270px;
     max-width: calc(100% - 24px); pointer-events: auto;
     background: var(--hud-background); border: 1px solid var(--hud-border);
-    border-radius: 10px; padding: 8px 10px; }
+    border-radius: 3px 10px 10px 10px; padding: 8px 10px; }
   #status { margin: 0; overflow-wrap: anywhere; }
   #status[data-state="playing"] { display: none; }
-  #course-title { margin: 0; font-weight: 600; white-space: nowrap;
+  #course-title { margin: 0; font-family: Georgia, "Times New Roman", serif; color: var(--gold); font-weight: 600; white-space: nowrap;
     overflow: hidden; text-overflow: ellipsis; font-size: 13px; }
   #status[data-state="failed"], #status[data-state="device-lost"] { color: #ffb4a2; }
   #status-restart { margin-top: 8px; min-height: 44px; }
   #game-controls { position: absolute; top: 58px; left: 12px; width: 270px;
     max-width: calc(100% - 24px); pointer-events: auto; flex-wrap: nowrap;
     background: var(--hud-background); border: 1px solid var(--hud-border);
-    border-radius: 10px; padding: 5px; gap: 4px; }
+    border-radius: 3px 10px 10px 10px; padding: 5px; gap: 4px; }
   #game-controls button { flex: 1; min-width: 0; min-height: 44px;
     padding: 4px; font-size: 12px; line-height: 1.3; }
   #feedback { position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%);
     width: max-content; max-width: min(360px, calc(100% - 24px)); }
   #game-status, #course-error { margin: 0; padding: 10px 14px;
     background: var(--hud-background); border: 1px solid var(--hud-border);
-    border-radius: 10px; }
+    border-radius: 3px 10px 10px 10px; }
   /* Routine feedback remains available to screen readers without a live card. */
   #game-status[data-phase="playing"][data-paused="false"][data-docking="0"] {
     position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
@@ -71,10 +77,10 @@
     background: var(--hud-background); backdrop-filter: blur(8px);
     border: 1px solid var(--hud-border); border-radius: 12px; padding: 0; }
   #game-help { width: min(390px, calc(100% - 32px)); max-height: calc(100% - 32px);
-    overflow: auto; padding: 20px; color: var(--hud-text); background: #0d2130;
+    overflow: auto; padding: 20px; color: var(--hud-text); background: var(--sea);
     border: 1px solid var(--hud-border); border-radius: 16px; }
   #game-help::backdrop { background: rgba(0,10,20,.65); }
-  #game-help h2 { margin: 0 0 12px; font-size: 20px; }
+  #game-help h2 { margin: 0 0 12px; font: 20px/1.2 Georgia, "Times New Roman", serif; color: var(--gold); }
   #game-instructions { margin: 0 0 20px; font-size: 15px; line-height: 1.6; }
   #game-help button { width: 100%; min-height: 44px; }
   [hidden] { display: none !important; }
@@ -128,7 +134,7 @@
   #panel > summary::after { content: '▸'; opacity: 0.7; }
   #panel[open] > summary::after { content: '▾'; }
   .panel-body { padding: 4px 14px 14px; display: grid; gap: 12px; }
-  fieldset { border: 1px solid rgba(255,255,255,0.12); border-radius: 8px; margin: 0; padding: 8px 10px; }
+  fieldset { border: 1px solid var(--hud-border); border-radius: 8px; margin: 0; padding: 8px 10px; }
   legend { padding: 0 6px; opacity: 0.85; font-weight: 600; }
   .row { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 6px; margin: 6px 0; }
   .row label { font-size: 13px; }
@@ -140,27 +146,29 @@
   .btns { display: flex; flex-wrap: wrap; gap: 6px; }
   button {
     font: inherit; padding: 5px 10px; border-radius: 7px; cursor: pointer;
-    border: 1px solid rgba(255,255,255,0.2);
-    background: #16233c; color: inherit;
+    border: 1px solid var(--hud-border);
+    background: var(--sea); color: inherit;
   }
-  button:hover { background: #1d2d4c; }
+  button:hover { background: #1b4d5d; }
+  button:focus-visible, summary:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
   button:disabled { opacity: 0.45; cursor: default; }
-  button[aria-pressed="true"] { background: #2b6cb0; border-color: #4a90d9; }
+  button[aria-pressed="true"], #mode[aria-expanded="true"] { background: var(--teal); border-color: var(--gold); }
+  #game-next { background: var(--gold); color: var(--ink); font-weight: 700; }
   .presets button { flex: 1; }
   textarea {
     width: 100%; min-height: 92px; font: 12px/1.3 ui-monospace, monospace;
-    background: #0b1526; color: #cfe0f5; border: 1px solid rgba(255,255,255,0.15);
+    background: var(--ink); color: var(--paper); border: 1px solid var(--hud-border);
     border-radius: 6px; padding: 6px; resize: vertical;
   }
   #io-message { font-size: 12px; min-height: 1.2em; }
   #io-message[data-kind="error"] { color: #ffb4a2; }
   #io-message[data-kind="ok"] { color: #9ae6b4; }
-  .hint { font-size: 12px; opacity: 0.7; }
+  .hint { font-size: 12px; color: var(--muted); }
 </style>
 </head>
 <body>
 
-<canvas id="canvas" width="1280" height="720" tabindex="0" aria-label="Ocean playground. Tap for ripples. Drag to move the water; stir to turn it."></canvas>
+<canvas id="canvas" width="1280" height="720" tabindex="0" aria-label="Boat rescue. Tap for ripples. Drag to move the water; stir to turn it."></canvas>
 <div id="hud"><div id="status-region">
 <p id="status" role="status" aria-live="polite" data-state="loading" data-frames="0">Loading the ocean…</p>
 <p id="course-title" hidden>Course 1 / 3 — River Mouth</p>
@@ -171,12 +179,12 @@
 <button type="button" id="game-pause" aria-pressed="false">Pause</button>
 <button type="button" id="game-reset">Retry</button>
 <button type="button" id="game-next" hidden>Next level</button>
-<button type="button" id="mode" aria-label="Switch to ocean tuning">Ocean</button>
+<button type="button" id="mode" aria-label="Switch to ocean tuning" aria-expanded="false" aria-controls="panel">Ocean</button>
 <button type="button" id="help-toggle" aria-haspopup="dialog" aria-controls="game-help" aria-expanded="false">Help</button>
 </div>
 
 <details id="panel" hidden>
-  <summary aria-label="Ocean tuning panel">Drift — ocean controls</summary>
+  <summary aria-label="Ocean tuning panel">Shape the sea</summary>
   <div class="panel-body">
 
     <div class="btns presets" role="group" aria-label="Presets">
@@ -215,10 +223,10 @@
       <div class="row"><label for="foam">Foam amount</label><output id="foam-out">0.35</output>
         <input type="range" id="foam" min="0" max="1" step="0.01" value="0.35"></div>
       <div class="colors">
-        <label>Deep<input type="color" id="deep" value="#071230"></label>
-        <label>Mid<input type="color" id="mid" value="#11456b"></label>
-        <label>Shallow<input type="color" id="shallow" value="#22858a"></label>
-        <label>Foam<input type="color" id="foamcol" value="#ecf3e5"></label>
+        <label>Deep<input type="color" id="deep" value="#081e2a"></label>
+        <label>Mid<input type="color" id="mid" value="#103f4d"></label>
+        <label>Shallow<input type="color" id="shallow" value="#286d70"></label>
+        <label>Foam<input type="color" id="foamcol" value="#f3eedc"></label>
       </div>
     </fieldset>
 

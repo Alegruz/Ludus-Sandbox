@@ -1,4 +1,4 @@
-# Drift: vertical river runs
+# Poseidon Saves the Day: vertical river runs
 
 The jam course now flows from bottom to top. The current keeps bringing hazards
 closer while the player steers a disabled boat by moving the water. A following
@@ -80,3 +80,12 @@ corrections every 30 simulation ticks, matching the native route pilot's cadence
 All three rescues and Replay pass on the final package with WebGPU touch at CI's
 0.5 render scale. This changes test navigation, retaining the authored levels,
 collision rules and success assertions.
+
+The river branch was then integrated with the Poseidon nautical art update from
+main (`913f191`). The painted water, timber boat, warm stone, anchor dock and
+responsive HUD are retained alongside the flowing river and camera. Updated
+portrait and landscape screenshots were captured from the merged Release ZIP
+`bb2c90d9d21a7cb815f23a1624a0fbee0e1878344b9144f1fe2786667ff427fd`
+and visually inspected. Both target builds, all native tests, the 13 renderer
+checks and mobile HUD checks pass after the merge. CI reruns the full campaign
+and interaction coverage on this integrated tree.
