@@ -7,7 +7,7 @@
 // fullscreen-rendering-handoff.md).
 //
 // The CPU mirror of this layout is src/ocean/ocean_uniforms.h; the two must
-// agree (offsets asserted on the C++ side). set/group 0, binding 0, 16128 bytes.
+// agree (offsets asserted on the C++ side). set/group 0, binding 0, 16336 bytes.
 
 #ifndef LUDUS_GLSL_ES
 #define LUDUS_GLSL_ES 0
@@ -77,6 +77,9 @@ struct OceanUniforms
     float4 flowInfo; // snapshot dimensions, signed velocity/height ranges
     float4 flow[192]; // coarse transport: momentum and advected material map
     float4 surface[768]; // full 48 x 64 surface: 16-bit height, 8-bit foam
+    float4 uiInfo;
+    float4 uiRects[6];
+    float4 uiColors[6];
 
 };
 
@@ -413,6 +416,18 @@ float4 fragmentMain(float4 position : SV_Position) : SV_Target0
         float hullEdge = (1.0 - smoothstep(0.04, 0.12, abs(length(relative) - radius))) * 0.5;
         color = lerp(color, float3(0.97, 0.85, 0.57), hullEdge);
         color = lerp(color, hullColor, hull);
+    }
+    // Bounded U0 adapter: ordered linear-alpha rectangles in the existing draw.
+    // A general UI renderer will use indexed quads and scissor batches.
+    for (int i = 0; i < 6; ++i)
+    {
+        if (i < int(ocean.uiInfo.x))
+        {
+            float4 rect = ocean.uiRects[i];
+            if (position.x >= rect.x && position.y >= rect.y &&
+                position.x < rect.x + rect.z && position.y < rect.y + rect.w)
+                color = lerp(color, ocean.uiColors[i].rgb, ocean.uiColors[i].a);
+        }
     }
     return float4(color, 1.0);
 }

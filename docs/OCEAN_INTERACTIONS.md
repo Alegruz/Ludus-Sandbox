@@ -74,9 +74,10 @@ foam. Rendering clips heights beyond this range; simulation retains them.
 A separate 16 × 24 transport snapshot carries velocity and material displacement
 with eight-bit channels. Decode happens before interpolation.
 
-The std140 block is 16128 bytes. Existing fields occupy bytes 0–735, boat motion
+The std140 block is 16336 bytes. Existing fields occupy bytes 0–735, boat motion
 begins at 736, flow metadata at 752, coarse transport at 768, and full surface at
-3840. C++ assertions, SPIR-V/WGSL/GLSL ES reflection and packaging enforce it.
+3840. The shared [runtime HUD](UI.md) adds count/rectangle/color commands at
+16128. C++ assertions, SPIR-V/WGSL/GLSL ES reflection and packaging enforce it.
 The linked [engine PR](https://github.com/Alegruz/Ludus/pull/67) increases the
 bounded uniform ceiling to the portable 16 KiB limit. The SDK revision is pinned
 in `config/ludus-version.txt`; machine paths stay in ignored local presets.

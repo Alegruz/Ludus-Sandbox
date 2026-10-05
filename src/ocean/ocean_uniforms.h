@@ -6,10 +6,10 @@
 // "CPU layouts are application contracts"). The layout MUST match the std140
 // layout Slang assigns to the `OceanUniforms` constant buffer in
 // shaders/ocean.slang. The offsets below were taken from the Slang reflection
-// JSON (set/group 0, binding 0, total size 16128) and are asserted so a mismatch
+// JSON (set/group 0, binding 0, total size 16336) and are asserted so a mismatch
 // is a compile error, not a silent visual bug.
 //
-// The block is set/group 0, binding 0, visible to both stages, 16128 bytes
+// The block is set/group 0, binding 0, visible to both stages, 16336 bytes
 // (within the engine's 16..16384 byte, multiple-of-16 bound).
 
 #include "game/ripple_game.h"
@@ -70,6 +70,9 @@ struct alignas(16) OceanUniforms final
     // Full 48 x 64 simulated surface. A float stores one exact 24-bit integer:
     // low 16 bits height (signed zero 32768), high 8 bits transported foam.
     float32 Surface[768][4]; // offset 3840, four cells per vec4
+    float32 UiInfo[4];       // visible solid-rectangle count, reserved
+    float32 UiRects[6][4];   // framebuffer x/y/width/height
+    float32 UiColors[6][4];  // linear RGB, straight alpha
 };
 
 static_assert(std::is_standard_layout_v<OceanUniforms>);
@@ -100,8 +103,11 @@ static_assert(offsetof(OceanUniforms, Rocks) == 480);
 static_assert(offsetof(OceanUniforms, BoatMotion) == 736);
 static_assert(offsetof(OceanUniforms, FlowInfo) == 752);
 static_assert(offsetof(OceanUniforms, Flow) == 768);
-static_assert(sizeof(OceanUniforms) == 16128 && alignof(OceanUniforms) == 16);
+static_assert(sizeof(OceanUniforms) == 16336 && alignof(OceanUniforms) == 16);
 static_assert(offsetof(OceanUniforms, Surface) == 3840);
+static_assert(offsetof(OceanUniforms, UiInfo) == 16128);
+static_assert(offsetof(OceanUniforms, UiRects) == 16144);
+static_assert(offsetof(OceanUniforms, UiColors) == 16240);
 // Within the engine's uniform bounds (16..16384, multiple of 16).
 static_assert(sizeof(OceanUniforms) % 16 == 0 && sizeof(OceanUniforms) >= 16 && sizeof(OceanUniforms) <= 16384);
 

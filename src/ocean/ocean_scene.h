@@ -22,6 +22,7 @@
 #include <ludus/platform/browser/window.h>
 
 #include "game/ripple_game.h"
+#include "ui/game_hud.h"
 
 #include "ocean/ocean_clock.h"
 #include "ocean/ocean_settings.h"
@@ -167,6 +168,7 @@ private:
     game::Camera mStrokeCamera;
     bool mGameEnabled = true;
     bool mFocused = true;
+    GameHud mHud;
     bool mSkipDelta = true;
     SceneState mState = SceneState::Stopped;
     rhi::StartupInfo mStartup;
