@@ -35,12 +35,13 @@ component, and `ludus_sandbox_ui_tests` verifies portrait clipping, DPI-equivale
 logical layout, command bounds and invalid/small viewport behavior. The pinned
 engine revision includes Ui so native and browser CI build the same core.
 
-See [the engine architecture](https://github.com/Alegruz/Ludus/blob/codex/runtime-ui/docs/architecture/ui.md)
+See [the engine architecture](https://github.com/Alegruz/Ludus/blob/main/docs/architecture/ui.md)
 for the reviewed Gems articles, ownership contracts and staged remaining work.
 
-Local validation passed the native SDK build and focused CTests, setup/tooling
+Local validation passed the native SDK build and all three CTests (including
+5483 fluid/gameplay assertions), setup/tooling
 regressions, formatting and static analysis of the new HUD/integration. Browser
-Development pixels matched at desktop 1x and portrait 2x on both WebGPU and
+Release ZIP pixels matched at desktop 1x and portrait 2x on both WebGPU and
 WebGL 2. These screenshots use Chromium SwiftShader; physical devices and native
 Vulkan pixels are unverified. CI validates the exact packaged Release payload.
 
