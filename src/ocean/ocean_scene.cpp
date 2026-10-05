@@ -149,6 +149,13 @@ rhi::FrameStatus OceanScene::RenderFrame(const platform::browser::WindowState& i
         auto value =
             game::BuildUniforms(settings, mClock, w, h, mGame, IsPaused() || !mFocused || !mVisible, mGameEnabled);
         value.GameInfo[0] = mGameEnabled ? 1.0F : 0.0F;
+        if (mGameEnabled)
+        {
+            // Use the acquired framebuffer / CSS ratio, including framebuffer
+            // clamping; devicePixelRatio alone may exceed the actual scale.
+            const float32 scale = input.CssWidth > 0 ? static_cast<float32>(w / input.CssWidth) : 1.0f;
+            mHud.WriteUniforms(value, mGame, scale);
+        }
         return value;
     };
     ocean::OceanUniforms uniforms = buildUniforms(width, height);

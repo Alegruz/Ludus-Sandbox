@@ -67,6 +67,17 @@ try {
       await until(() => page.locator('#status').getAttribute('data-state'), s => s === 'playing', 'startup');
       await waitFrames(page, 3);
       assert.equal(await page.locator('#status').getAttribute('data-backend'), backend);
+      // The CPU Ui context resolves logical coordinates and the shader consumes
+      // its clipped rectangle commands. Verify pixels, including emulated DPR.
+      const hudImage = PNG.sync.read(await page.screenshot());
+      const hudScale = hudImage.width / viewport.width;
+      const hudCanvas = await page.locator('#canvas').boundingBox();
+      const hudX = Math.round((hudCanvas.x + 40) * hudScale);
+      const hudY = Math.round((hudCanvas.y + hudCanvas.height - 120) * hudScale);
+      const hudPixel = (hudY * hudImage.width + hudX) * 4;
+      assert(hudImage.data[hudPixel + 2] > hudImage.data[hudPixel] + 40 &&
+        hudImage.data[hudPixel + 1] > hudImage.data[hudPixel] + 30,
+        'Engine Ui readiness meter is missing or misplaced');
       const initial = await state(page);
       assert.equal(Number(initial.placements), 0);
       await page.evaluate(() => Module._OceanSetWaveIntensity(0));

@@ -378,7 +378,7 @@ void TestSurfaceGestures() noexcept
     // Packing stays exactly representable and samples the solver, including zero.
     game.Reset();
     const auto calm = BuildUniforms(ludus::sandbox::ocean::DefaultSettings(), {}, 960, 540, game, true);
-    CHECK(sizeof(calm) == 16128 && calm.FlowInfo[0] == 16 && calm.FlowInfo[1] == 24 && calm.FlowInfo[2] == 0);
+    CHECK(sizeof(calm) == 16336 && calm.FlowInfo[0] == 16 && calm.FlowInfo[1] == 24 && calm.FlowInfo[2] == 0);
     CHECK(calm.Flow[0][0] == 8421504.0F); // three signed zero channels (128).
     Circle(game, {-6, 0}, 1.0);
     const auto snapshot = BuildUniforms(ludus::sandbox::ocean::DefaultSettings(), {}, 960, 540, game, true);

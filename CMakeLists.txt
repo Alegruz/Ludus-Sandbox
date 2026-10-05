@@ -19,7 +19,7 @@ project(
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
 
-find_package(Ludus CONFIG REQUIRED)
+find_package(Ludus CONFIG REQUIRED COMPONENTS Ui)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -51,6 +51,7 @@ target_compile_options(ludus_sandbox_ocean PRIVATE -Wall -Wextra -Wpedantic -Wer
 # ---------------------------------------------------------------------------
 add_executable(LudusSandbox
     src/ocean/ocean_scene.cpp
+    src/ui/game_hud.cpp
 )
 target_link_libraries(LudusSandbox PRIVATE
     ludus_sandbox_ocean
@@ -59,6 +60,7 @@ target_link_libraries(LudusSandbox PRIVATE
     Ludus::FoundationProfiling
     Ludus::Platform
     Ludus::GraphicsRhi
+    Ludus::Ui
 )
 target_compile_options(LudusSandbox PRIVATE -Wall -Wextra -Wpedantic -Werror -fno-exceptions)
 
@@ -112,6 +114,11 @@ if(LUDUS_SANDBOX_BUILD_TESTS AND NOT EMSCRIPTEN)
     target_link_libraries(ludus_sandbox_ripple_tests PRIVATE ludus_sandbox_ocean)
     target_compile_options(ludus_sandbox_ripple_tests PRIVATE -Wall -Wextra -Wpedantic -Werror -fno-exceptions)
     enable_testing()
+    add_executable(ludus_sandbox_ui_tests tests/ui_tests.cpp src/ui/game_hud.cpp)
+    target_include_directories(ludus_sandbox_ui_tests PRIVATE src)
+    target_link_libraries(ludus_sandbox_ui_tests PRIVATE ludus_sandbox_ocean Ludus::Ui)
+    target_compile_options(ludus_sandbox_ui_tests PRIVATE -Wall -Wextra -Wpedantic -Werror -fno-exceptions)
+    add_test(NAME ludus_sandbox_ui_tests COMMAND ludus_sandbox_ui_tests)
     add_test(NAME ludus_sandbox_ocean_tests COMMAND ludus_sandbox_ocean_tests)
     add_test(NAME ludus_sandbox_ripple_tests COMMAND ludus_sandbox_ripple_tests)
 endif()

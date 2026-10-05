@@ -96,6 +96,12 @@ jobs:
       - name: Run tests
         run: ctest --test-dir out/build/linux-clang-development --output-on-failure
 
+      - name: Analyze SDK-backed HUD and scene integration
+        run: |
+          clang-tidy-18 -p out/build/linux-clang-development \
+            src/ui/game_hud.cpp src/ocean/ocean_scene.cpp tests/ui_tests.cpp \
+            --warnings-as-errors='*' --header-filter='(.*/)?src/ui/.*'
+
       - name: Analyze the production fluid adapter against the installed SDK
         run: clang-tidy-18 src/game/water_field.cpp -p out/build/linux-clang-development --warnings-as-errors='*'
 

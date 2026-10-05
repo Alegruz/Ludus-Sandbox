@@ -112,3 +112,5 @@ tests/ripple_tests.cpp     Ring contact, steering, timing and snapshot tests
 tools/preview/             Offline CPU renderer for screenshots (not shipped in the game)
 docs/                      Build, design, validation docs + screenshots
 ```
+
+The native and browser game share an engine-resolved progress HUD. See [runtime UI](docs/UI.md).
